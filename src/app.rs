@@ -237,16 +237,20 @@ impl HopalongApp {
         let avg_dt: f32 = self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;
         let fps = if avg_dt > 0.0 { 1.0 / avg_dt } else { 0.0 };
 
-        egui::Area::new(egui::Id::new("fps_overlay"))
-            .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-8.0, 8.0))
-            .show(ctx, |ui| {
-                ui.label(
-                    egui::RichText::new(format!("{:.0}", fps))
-                        .color(egui::Color32::from_rgb(0, 255, 0))
-                        .size(14.0)
-                        .background_color(egui::Color32::from_black_alpha(160)),
-                );
-            });
+        let painter = ctx.layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::new("fps_paint"),
+        ));
+        let rect = ctx.input(|i| i.viewport_rect());
+        let pos = egui::pos2(rect.max.x - 8.0, 8.0);
+
+        painter.text(
+            pos,
+            egui::Align2::RIGHT_TOP,
+            format!("{:.0}", fps),
+            egui::FontId::proportional(14.0),
+            egui::Color32::from_rgb(0, 255, 0),
+        );
     }
 }
 
