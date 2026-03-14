@@ -1,5 +1,7 @@
 # Hopalong Visoxide
 
+> This project was vibe coded with Claude Opus 4.6 in [opencode](https://github.com/nichochar/opencode).
+
 A real-time Barry Martin's Hopalong Orbits visualizer built with Rust, using **eframe/egui** for the UI and **wgpu** for GPU-accelerated particle rendering.
 
 This is a native desktop port of the [Hopalong Orbits Visualizer](https://github.com/samleatherdale/hopalong-redux) (originally by Iacopo Sassarini, updated by Sam Leatherdale), rewritten from TypeScript/Three.js to Rust.
