@@ -237,11 +237,8 @@ impl HopalongApp {
         let avg_dt: f32 = self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;
         let fps = if avg_dt > 0.0 { 1.0 / avg_dt } else { 0.0 };
 
-        let viewport = ctx.input(|i| i.viewport_rect());
-        let x = viewport.max.x - 50.0;
-
         egui::Area::new(egui::Id::new("fps_overlay"))
-            .fixed_pos(egui::pos2(x, 8.0))
+            .anchor(egui::Align2::RIGHT_TOP, egui::vec2(-8.0, 8.0))
             .show(ctx, |ui| {
                 ui.label(
                     egui::RichText::new(format!("{:.0}", fps))
