@@ -36,7 +36,7 @@ impl HopalongApp {
             show_settings: false,
             last_frame: Instant::now(),
             frame_times: Vec::with_capacity(120),
-            show_fps: true,
+            show_fps: false,
             should_quit: false,
         }
     }
