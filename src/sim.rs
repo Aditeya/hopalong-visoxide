@@ -68,6 +68,9 @@ pub struct ParticleSetState {
     pub z_position: f32,
     pub z_rotation: f32,
     pub needs_update: bool,
+    /// Whether this particle set is currently showing the new orbit data.
+    /// When `false`, it still shows the previous orbit until it wraps around.
+    pub using_new_orbit: bool,
     /// Which subset index this particle set uses (for color + orbit data).
     pub subset_index: usize,
     /// Which level index this particle set belongs to.
@@ -83,6 +86,10 @@ pub struct HopalongSim {
     pub orbit_subsets: Vec<Vec<[f32; 2]>>,
     /// Hue value [0, 1) per subset.
     pub hue_values: Vec<f32>,
+    /// Previous orbit data kept alive for smooth transitions. Particle sets that
+    /// haven't wrapped around yet continue reading from these until they do.
+    pub prev_orbit_subsets: Vec<Vec<[f32; 2]>>,
+    pub prev_hue_values: Vec<f32>,
     /// State for each particle set (num_levels * num_subsets total).
     pub particle_sets: Vec<ParticleSetState>,
     /// Camera position.
@@ -113,6 +120,8 @@ impl HopalongSim {
             },
             orbit_subsets: Vec::new(),
             hue_values: Vec::new(),
+            prev_orbit_subsets: Vec::new(),
+            prev_hue_values: Vec::new(),
             particle_sets: Vec::new(),
             camera_x: 0.0,
             camera_y: 0.0,
@@ -168,6 +177,7 @@ impl HopalongSim {
                     z_position: z,
                     z_rotation: 0.0,
                     needs_update: false,
+                    using_new_orbit: true,
                     subset_index: subset,
                     level_index: level,
                 });
@@ -198,8 +208,10 @@ impl HopalongSim {
             // Wraparound: recycle behind camera.
             if ps.z_position > cam_z {
                 ps.z_position = -((num_levels - 1) as f32) * LEVEL_DEPTH;
+                // Transition to the new orbit pattern on wraparound.
                 if ps.needs_update {
                     ps.needs_update = false;
+                    ps.using_new_orbit = true;
                 }
             }
         }
@@ -215,6 +227,11 @@ impl HopalongSim {
     }
 
     fn regenerate_orbit(&mut self) {
+        // Preserve the current orbit so particle sets that haven't wrapped yet
+        // continue rendering the old pattern during the transition.
+        self.prev_orbit_subsets = std::mem::take(&mut self.orbit_subsets);
+        self.prev_hue_values = std::mem::take(&mut self.hue_values);
+
         self.shuffle_params();
         self.orbit_subsets = generate_orbit(
             &self.orbit_params,
@@ -222,9 +239,12 @@ impl HopalongSim {
             self.settings.points_per_subset,
         );
         self.hue_values = generate_hues(self.settings.subset_count);
-        // Flag all particle sets for lazy geometry update.
+
+        // Flag all particle sets for lazy geometry update — they keep showing
+        // the old orbit until they individually wrap around past the camera.
         for ps in &mut self.particle_sets {
             ps.needs_update = true;
+            ps.using_new_orbit = false;
         }
     }
 

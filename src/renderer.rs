@@ -323,6 +323,10 @@ impl HopalongRendererResources {
 // ── Build Instance Data ────────────────────────────────────────────────────────
 
 /// Build the flat array of `ParticleInstance` from the current simulation state.
+///
+/// Particle sets that haven't wrapped around yet after an orbit regeneration
+/// continue reading from `prev_orbit_subsets` / `prev_hue_values`, creating
+/// the smooth fly-through transition between patterns.
 pub fn build_instances(sim: &HopalongSim) -> Vec<ParticleInstance> {
     let num_points = sim.settings.points_per_subset;
 
@@ -330,12 +334,22 @@ pub fn build_instances(sim: &HopalongSim) -> Vec<ParticleInstance> {
 
     for ps in &sim.particle_sets {
         let subset_idx = ps.subset_index;
-        if subset_idx >= sim.orbit_subsets.len() {
+
+        // Choose current or previous orbit data based on transition state.
+        let (orbit_data, hue_data) = if ps.using_new_orbit {
+            (&sim.orbit_subsets, &sim.hue_values)
+        } else if !sim.prev_orbit_subsets.is_empty() {
+            (&sim.prev_orbit_subsets, &sim.prev_hue_values)
+        } else {
+            (&sim.orbit_subsets, &sim.hue_values)
+        };
+
+        if subset_idx >= orbit_data.len() {
             continue;
         }
-        let subset_points = &sim.orbit_subsets[subset_idx];
-        let hue = if subset_idx < sim.hue_values.len() {
-            sim.hue_values[subset_idx]
+        let subset_points = &orbit_data[subset_idx];
+        let hue = if subset_idx < hue_data.len() {
+            hue_data[subset_idx]
         } else {
             0.0
         };
