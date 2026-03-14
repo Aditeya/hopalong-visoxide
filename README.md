@@ -8,6 +8,8 @@ This is a native desktop port of the [Hopalong Orbits Visualizer](https://github
 
 ![Screenshot](assets/screenshot.jpg)
 
+**[Watch the demo video on YouTube](https://www.youtube.com/watch?v=lcryjR2xjMk)**
+
 [![Demo Video](https://img.youtube.com/vi/lcryjR2xjMk/maxresdefault.jpg)](https://www.youtube.com/watch?v=lcryjR2xjMk)
 
 ## What is it?
