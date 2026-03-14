@@ -324,41 +324,21 @@ impl HopalongRendererResources {
 
 /// Build the flat array of `ParticleInstance` from the current simulation state.
 ///
-/// Particle sets that haven't wrapped around yet after an orbit regeneration
-/// continue reading from `prev_orbit_subsets` / `prev_hue_values`, creating
-/// the smooth fly-through transition between patterns.
+/// Each particle set has its own baked copy of orbit points and hue. Sets that
+/// haven't wrapped around yet after an orbit regeneration still render their
+/// old baked data, creating the gradual fly-through transition between patterns.
 pub fn build_instances(sim: &HopalongSim) -> Vec<ParticleInstance> {
     let num_points = sim.settings.points_per_subset;
 
     let mut instances = Vec::with_capacity(sim.total_particles());
 
     for ps in &sim.particle_sets {
-        let subset_idx = ps.subset_index;
-
-        // Choose current or previous orbit data based on transition state.
-        let (orbit_data, hue_data) = if ps.using_new_orbit {
-            (&sim.orbit_subsets, &sim.hue_values)
-        } else if !sim.prev_orbit_subsets.is_empty() {
-            (&sim.prev_orbit_subsets, &sim.prev_hue_values)
-        } else {
-            (&sim.orbit_subsets, &sim.hue_values)
-        };
-
-        if subset_idx >= orbit_data.len() {
-            continue;
-        }
-        let subset_points = &orbit_data[subset_idx];
-        let hue = if subset_idx < hue_data.len() {
-            hue_data[subset_idx]
-        } else {
-            0.0
-        };
-        let color = sim::hsv_to_rgba(hue, DEF_SATURATION, DEF_BRIGHTNESS);
+        let color = sim::hsv_to_rgba(ps.hue, DEF_SATURATION, DEF_BRIGHTNESS);
 
         let cos_r = ps.z_rotation.cos();
         let sin_r = ps.z_rotation.sin();
 
-        for point in subset_points.iter().take(num_points) {
+        for point in ps.points.iter().take(num_points) {
             // Apply Z-axis rotation to the 2D orbit position.
             let rx = point[0] * cos_r - point[1] * sin_r;
             let ry = point[0] * sin_r + point[1] * cos_r;
