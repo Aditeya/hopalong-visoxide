@@ -12,6 +12,7 @@ pub struct HopalongApp {
     last_frame: Instant,
     frame_times: Vec<f32>,
     show_fps: bool,
+    should_quit: bool,
 }
 
 impl HopalongApp {
@@ -36,6 +37,7 @@ impl HopalongApp {
             last_frame: Instant::now(),
             frame_times: Vec::with_capacity(120),
             show_fps: true,
+            should_quit: false,
         }
     }
 
@@ -90,11 +92,20 @@ impl HopalongApp {
                         egui::Key::Tab => {
                             self.show_settings = !self.show_settings;
                         }
+                        // Quit
+                        egui::Key::Q => {
+                            self.should_quit = true;
+                        }
                         _ => {}
                     }
                 }
             }
         });
+
+        // Handle quit outside the input closure.
+        if self.should_quit {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
     }
 
     fn ui_settings(&mut self, ctx: &egui::Context) {
@@ -113,7 +124,6 @@ impl HopalongApp {
                 ui.add(egui::Slider::new(&mut self.sim.settings.speed, 0.0..=50.0).step_by(0.25));
 
                 ui.label("Rotation Speed");
-                // Display as a more intuitive range.
                 let mut rot_display = self.sim.settings.rotation_speed * -2000.0;
                 if ui
                     .add(egui::Slider::new(&mut rot_display, -100.0..=100.0).step_by(1.0))
@@ -174,8 +184,33 @@ impl HopalongApp {
 
                 ui.checkbox(&mut self.sim.settings.mouse_locked, "Mouse Locked (L)");
 
+                // Center checkbox: centres camera and enables lock.
+                let is_centered = self.sim.settings.mouse_locked
+                    && self.sim.camera_x.abs() < 1.0
+                    && self.sim.camera_y.abs() < 1.0;
+                let mut center_checked = is_centered;
+                if ui.checkbox(&mut center_checked, "Center (C)").changed() {
+                    if center_checked {
+                        // Centre and lock.
+                        self.sim.camera_x = 0.0;
+                        self.sim.camera_y = 0.0;
+                        self.sim.mouse_x = 0.0;
+                        self.sim.mouse_y = 0.0;
+                        self.sim.settings.mouse_locked = true;
+                    } else {
+                        // Unlock.
+                        self.sim.settings.mouse_locked = false;
+                    }
+                }
+
+                ui.separator();
+
                 if ui.button("Reset Defaults (R)").clicked() {
                     self.sim.reset_defaults();
+                }
+
+                if ui.button("Quit (Q)").clicked() {
+                    self.should_quit = true;
                 }
 
                 ui.separator();
@@ -185,8 +220,12 @@ impl HopalongApp {
                 ui.label(format!("Total particles: {}", self.sim.total_particles()));
 
                 ui.separator();
-                ui.small("Tab: toggle panel | Arrows: speed/rot");
-                ui.small("L: lock mouse | C: centre | R: reset");
+                ui.label(egui::RichText::new("Tab: toggle panel").size(13.0));
+                ui.label(egui::RichText::new("Arrows: speed / rotation").size(13.0));
+                ui.label(egui::RichText::new("L: lock mouse").size(13.0));
+                ui.label(egui::RichText::new("C: centre + lock").size(13.0));
+                ui.label(egui::RichText::new("R: reset defaults").size(13.0));
+                ui.label(egui::RichText::new("Q: quit").size(13.0));
             });
     }
 
@@ -198,11 +237,14 @@ impl HopalongApp {
         let avg_dt: f32 = self.frame_times.iter().sum::<f32>() / self.frame_times.len() as f32;
         let fps = if avg_dt > 0.0 { 1.0 / avg_dt } else { 0.0 };
 
+        let viewport = ctx.input(|i| i.viewport_rect());
+        let x = viewport.max.x - 50.0;
+
         egui::Area::new(egui::Id::new("fps_overlay"))
-            .fixed_pos(egui::pos2(8.0, 8.0))
+            .fixed_pos(egui::pos2(x, 8.0))
             .show(ctx, |ui| {
                 ui.label(
-                    egui::RichText::new(format!("{:.0} FPS", fps))
+                    egui::RichText::new(format!("{:.0}", fps))
                         .color(egui::Color32::from_rgb(0, 255, 0))
                         .size(14.0)
                         .background_color(egui::Color32::from_black_alpha(160)),
@@ -220,6 +262,11 @@ impl eframe::App for HopalongApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Continuous repaint for animation.
         ctx.request_repaint();
+
+        // Set slider handle shape globally.
+        ctx.style_mut(|style| {
+            style.visuals.handle_shape = egui::style::HandleShape::Rect { aspect_ratio: 0.5 };
+        });
 
         // ── Delta time ──
         let now = Instant::now();
