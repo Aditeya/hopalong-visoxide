@@ -76,9 +76,16 @@ impl HopalongRendererResources {
 
         // ── Load galaxy sprite texture ──
         let sprite_bytes = include_bytes!("../assets/galaxy.png");
-        let sprite_image = image::load_from_memory(sprite_bytes)
+        let mut sprite_image = image::load_from_memory(sprite_bytes)
             .expect("Failed to load galaxy.png")
             .to_rgba8();
+        // The galaxy.png has no alpha channel (RGB only). Generate alpha from
+        // luminance so the dark edges become transparent — this is how Three.js
+        // PointsMaterial effectively treats the sprite map with additive blending.
+        for pixel in sprite_image.pixels_mut() {
+            let lum = pixel[0].max(pixel[1]).max(pixel[2]);
+            pixel[3] = lum;
+        }
         let (tex_w, tex_h) = sprite_image.dimensions();
 
         let texture_size = wgpu::Extent3d {
@@ -92,7 +99,7 @@ impl HopalongRendererResources {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });

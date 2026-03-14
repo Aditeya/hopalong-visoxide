@@ -42,7 +42,7 @@ fn vs_main(vert: VertexInput, inst: InstanceInput) -> VertexOutput {
     let clip_center = uniforms.view_proj * vec4<f32>(inst.world_pos, 1.0);
 
     // Billboard: offset in clip space (scale by w to keep screen-space size consistent).
-    let offset = vec2<f32>(vert.quad_pos.x, vert.quad_pos.y) * uniforms.sprite_size * clip_center.w * 0.002;
+    let offset = vec2<f32>(vert.quad_pos.x, vert.quad_pos.y) * uniforms.sprite_size * clip_center.w * 0.01;
     out.clip_pos = vec4<f32>(clip_center.xy + offset, clip_center.z, clip_center.w);
 
     // UV for texture sampling.
@@ -60,6 +60,8 @@ fn vs_main(vert: VertexInput, inst: InstanceInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let tex_color = textureSample(sprite_texture, sprite_sampler, in.uv);
-    let particle_color = tex_color * in.color * in.fog_factor;
+    // Brightness boost (2x) to compensate for additive blending accumulation
+    // being less dense than the Three.js version at comparable particle counts.
+    let particle_color = tex_color * in.color * in.fog_factor * 2.0;
     return particle_color;
 }
