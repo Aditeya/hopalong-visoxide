@@ -57,7 +57,7 @@ impl Default for SimSettings {
             points_per_subset: DEFAULT_POINTS_SUBSET,
             subset_count: DEFAULT_SUBSETS,
             level_count: DEFAULT_LEVELS,
-            mouse_locked: false,
+            mouse_locked: true,
         }
     }
 }
