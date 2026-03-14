@@ -4,6 +4,10 @@ A real-time Barry Martin's Hopalong Orbits visualizer built with Rust, using **e
 
 This is a native desktop port of the [Hopalong Orbits Visualizer](https://github.com/samleatherdale/hopalong-redux) (originally by Iacopo Sassarini, updated by Sam Leatherdale), rewritten from TypeScript/Three.js to Rust.
 
+![Screenshot](assets/screenshot.jpg)
+
+[![Demo Video](https://img.youtube.com/vi/lcryjR2xjMk/maxresdefault.jpg)](https://www.youtube.com/watch?v=lcryjR2xjMk)
+
 ## What is it?
 
 The Hopalong attractor is a mathematical fractal discovered by Barry Martin. This visualizer generates orbit patterns from the attractor equations and renders them as ~196,000 glowing particles flying toward the camera, creating a mesmerizing tunnel effect. New orbit patterns are generated every 3 seconds with smooth fly-through transitions between them.

@@ -3,3 +3,4 @@
 *.jpeg
 *.png
 !assets/galaxy.png
+!assets/screenshot.jpg
