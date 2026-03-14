@@ -1,6 +1,6 @@
 # Hopalong Visoxide
 
-> This project was vibe coded with Claude Opus 4.6 in [opencode](https://github.com/nichochar/opencode).
+> This project was vibe coded with Claude Opus 4.6 in [opencode](https://opencode.ai/).
 
 A real-time Barry Martin's Hopalong Orbits visualizer built with Rust, using **eframe/egui** for the UI and **wgpu** for GPU-accelerated particle rendering.
 
