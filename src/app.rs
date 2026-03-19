@@ -218,56 +218,72 @@ impl HopalongApp {
             return;
         }
 
+        let viewport = ctx.input(|i| i.viewport_rect());
+        let padding = 8.0;
+        let frame_margin: i8 = 14;
+        let content_width = 260.0;
+        let panel_height = viewport.height() - padding * 2.0;
+
         let panel_frame = egui::Frame::default()
             .fill(PANEL_BG)
-            .inner_margin(egui::Margin::same(14))
-            .stroke(egui::Stroke::new(1.0, PANEL_STROKE));
+            .inner_margin(egui::Margin::same(frame_margin))
+            .stroke(egui::Stroke::new(1.0, PANEL_STROKE))
+            .corner_radius(egui::CornerRadius::same(8));
 
-        let max_h = ctx.input(|i| i.viewport_rect().height()) - 16.0;
+        egui::Area::new(egui::Id::new("settings_panel"))
+            .fixed_pos(egui::pos2(padding, padding))
+            .show(ctx, |ui| {
+                panel_frame.show(ui, |ui| {
+                    ui.set_width(content_width);
+                    ui.set_min_height(panel_height - (frame_margin as f32) * 2.0);
 
-        egui::Window::new(
-            egui::RichText::new("Hopalong Orbits")
-                .color(egui::Color32::WHITE)
-                .size(16.0),
-        )
-        .id(egui::Id::new("settings_panel"))
-        .anchor(egui::Align2::LEFT_TOP, [8.0, 8.0])
-        .collapsible(false)
-        .resizable(false)
-        .title_bar(true)
-        .frame(panel_frame)
-        .max_height(max_h)
-        .scroll([false, true])
-        .show(ctx, |ui| {
-            ui.set_width(260.0);
+                    // ── Title (pinned above scroll) ──
+                    ui.heading(
+                        egui::RichText::new("Hopalong Orbits")
+                            .color(egui::Color32::WHITE)
+                            .size(18.0),
+                    );
+                    ui.add_space(4.0);
+                    ui.separator();
+                    ui.add_space(6.0);
 
-            // ── Simulation ──
-            self.ui_section_simulation(ui);
-            ui.add_space(2.0);
+                    // ── Scrollable body (fills remaining height) ──
+                    let remaining = ui.available_height();
+                    egui::ScrollArea::vertical()
+                        .max_height(remaining)
+                        .auto_shrink(false)
+                        .show(ui, |ui| {
+                            ui.set_width(content_width);
 
-            // ── Camera ──
-            self.ui_section_camera(ui);
-            ui.add_space(2.0);
+                            // ── Simulation ──
+                            self.ui_section_simulation(ui);
+                            ui.add_space(2.0);
 
-            // ── Particles ──
-            self.ui_section_particles(ui);
-            ui.add_space(2.0);
+                            // ── Camera ──
+                            self.ui_section_camera(ui);
+                            ui.add_space(2.0);
 
-            // ── Info ──
-            self.ui_section_info(ui);
+                            // ── Particles ──
+                            self.ui_section_particles(ui);
+                            ui.add_space(2.0);
 
-            ui.add_space(6.0);
-            ui.separator();
-            ui.add_space(6.0);
+                            // ── Info ──
+                            self.ui_section_info(ui);
 
-            // ── Action Buttons ──
-            self.ui_action_buttons(ui);
+                            ui.add_space(6.0);
+                            ui.separator();
+                            ui.add_space(6.0);
 
-            ui.add_space(6.0);
+                            // ── Action Buttons ──
+                            self.ui_action_buttons(ui);
 
-            // ── Keyboard Shortcuts ──
-            self.ui_section_shortcuts(ui);
-        });
+                            ui.add_space(6.0);
+
+                            // ── Keyboard Shortcuts ──
+                            self.ui_section_shortcuts(ui);
+                        });
+                });
+            });
     }
 
     fn ui_section_simulation(&mut self, ui: &mut egui::Ui) {
