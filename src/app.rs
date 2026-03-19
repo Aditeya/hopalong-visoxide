@@ -223,6 +223,8 @@ impl HopalongApp {
             .inner_margin(egui::Margin::same(14))
             .stroke(egui::Stroke::new(1.0, PANEL_STROKE));
 
+        let max_h = ctx.input(|i| i.viewport_rect().height()) - 16.0;
+
         egui::Window::new(
             egui::RichText::new("Hopalong Orbits")
                 .color(egui::Color32::WHITE)
@@ -234,6 +236,8 @@ impl HopalongApp {
         .resizable(false)
         .title_bar(true)
         .frame(panel_frame)
+        .max_height(max_h)
+        .scroll([false, true])
         .show(ctx, |ui| {
             ui.set_width(260.0);
 
