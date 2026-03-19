@@ -223,49 +223,47 @@ impl HopalongApp {
             .inner_margin(egui::Margin::same(14))
             .stroke(egui::Stroke::new(1.0, PANEL_STROKE));
 
-        egui::SidePanel::left("settings_panel")
-            .resizable(false)
-            .default_width(280.0)
-            .frame(panel_frame)
-            .show(ctx, |ui| {
-                // ── Title ──
-                ui.add_space(2.0);
-                ui.heading(
-                    egui::RichText::new("Hopalong Orbits")
-                        .color(egui::Color32::WHITE)
-                        .size(18.0),
-                );
-                ui.add_space(4.0);
-                ui.separator();
-                ui.add_space(6.0);
+        egui::Window::new(
+            egui::RichText::new("Hopalong Orbits")
+                .color(egui::Color32::WHITE)
+                .size(16.0),
+        )
+        .id(egui::Id::new("settings_panel"))
+        .anchor(egui::Align2::LEFT_TOP, [8.0, 8.0])
+        .collapsible(false)
+        .resizable(false)
+        .title_bar(true)
+        .frame(panel_frame)
+        .show(ctx, |ui| {
+            ui.set_width(260.0);
 
-                // ── Simulation ──
-                self.ui_section_simulation(ui);
-                ui.add_space(2.0);
+            // ── Simulation ──
+            self.ui_section_simulation(ui);
+            ui.add_space(2.0);
 
-                // ── Camera ──
-                self.ui_section_camera(ui);
-                ui.add_space(2.0);
+            // ── Camera ──
+            self.ui_section_camera(ui);
+            ui.add_space(2.0);
 
-                // ── Particles ──
-                self.ui_section_particles(ui);
-                ui.add_space(2.0);
+            // ── Particles ──
+            self.ui_section_particles(ui);
+            ui.add_space(2.0);
 
-                // ── Info ──
-                self.ui_section_info(ui);
+            // ── Info ──
+            self.ui_section_info(ui);
 
-                ui.add_space(6.0);
-                ui.separator();
-                ui.add_space(6.0);
+            ui.add_space(6.0);
+            ui.separator();
+            ui.add_space(6.0);
 
-                // ── Action Buttons ──
-                self.ui_action_buttons(ui);
+            // ── Action Buttons ──
+            self.ui_action_buttons(ui);
 
-                ui.add_space(6.0);
+            ui.add_space(6.0);
 
-                // ── Keyboard Shortcuts ──
-                self.ui_section_shortcuts(ui);
-            });
+            // ── Keyboard Shortcuts ──
+            self.ui_section_shortcuts(ui);
+        });
     }
 
     fn ui_section_simulation(&mut self, ui: &mut egui::Ui) {
