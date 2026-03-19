@@ -8,7 +8,8 @@ fn main() -> eframe::Result {
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("Hopalong Orbits Visualizer")
-            .with_inner_size([1280.0, 720.0]),
+            .with_inner_size([1280.0, 720.0])
+            .with_min_inner_size([800.0, 500.0]),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };

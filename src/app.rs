@@ -235,7 +235,9 @@ impl HopalongApp {
             .show(ctx, |ui| {
                 panel_frame.show(ui, |ui| {
                     ui.set_width(content_width);
-                    ui.set_min_height(panel_height - (frame_margin as f32) * 2.0);
+                    let inner_height = panel_height - (frame_margin as f32) * 2.0;
+                    ui.set_min_height(inner_height);
+                    ui.set_max_height(inner_height);
 
                     // ── Title (pinned above scroll) ──
                     ui.heading(
