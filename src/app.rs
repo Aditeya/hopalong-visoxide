@@ -6,39 +6,82 @@ use eframe::egui;
 use crate::renderer::{self, HopalongPaintCallback, HopalongRendererResources};
 use crate::sim::HopalongSim;
 
-// ── Theme Colors ───────────────────────────────────────────────────────────────
+// ── Adaptive Theme Colors ──────────────────────────────────────────────────────
 
-/// Accent blue for interactive elements and section headers.
-const ACCENT: egui::Color32 = egui::Color32::from_rgb(100, 120, 220);
-const ACCENT_HOVER: egui::Color32 = egui::Color32::from_rgb(130, 150, 255);
-const ACCENT_DIM: egui::Color32 = egui::Color32::from_rgb(70, 85, 160);
+/// Theme-specific color palette for adaptive dark/light mode support.
+struct ThemeColors {
+    accent: egui::Color32,
+    accent_hover: egui::Color32,
+    accent_dim: egui::Color32,
+    section_header: egui::Color32,
+    text_primary: egui::Color32,
+    text_secondary: egui::Color32,
+    panel_bg: egui::Color32,
+    panel_stroke: egui::Color32,
+    widget_bg: egui::Color32,
+    widget_bg_hover: egui::Color32,
+    widget_bg_active: egui::Color32,
+    separator: egui::Color32,
+    reset_color: egui::Color32,
+    quit_color: egui::Color32,
+    fps_green: egui::Color32,
+    fps_bg: egui::Color32,
+    extreme_bg: egui::Color32,
+    faint_bg: egui::Color32,
+    title_color: egui::Color32,
+}
 
-/// Section header color (brighter accent).
-const SECTION_HEADER: egui::Color32 = egui::Color32::from_rgb(150, 170, 255);
+impl ThemeColors {
+    /// Dark mode color palette - cosmic theme with deep blues.
+    fn dark() -> Self {
+        Self {
+            accent: egui::Color32::from_rgb(100, 120, 220),
+            accent_hover: egui::Color32::from_rgb(130, 150, 255),
+            accent_dim: egui::Color32::from_rgb(70, 85, 160),
+            section_header: egui::Color32::from_rgb(150, 170, 255),
+            text_primary: egui::Color32::from_rgb(210, 210, 225),
+            text_secondary: egui::Color32::from_rgb(130, 130, 155),
+            panel_bg: egui::Color32::from_rgba_premultiplied(10, 10, 20, 210),
+            panel_stroke: egui::Color32::from_rgba_premultiplied(70, 70, 130, 50),
+            widget_bg: egui::Color32::from_rgba_premultiplied(30, 30, 50, 180),
+            widget_bg_hover: egui::Color32::from_rgba_premultiplied(45, 45, 75, 200),
+            widget_bg_active: egui::Color32::from_rgba_premultiplied(60, 60, 105, 220),
+            separator: egui::Color32::from_rgba_premultiplied(70, 70, 130, 40),
+            reset_color: egui::Color32::from_rgb(210, 180, 60),
+            quit_color: egui::Color32::from_rgb(170, 65, 65),
+            fps_green: egui::Color32::from_rgb(80, 240, 120),
+            fps_bg: egui::Color32::from_rgba_premultiplied(0, 0, 0, 160),
+            extreme_bg: egui::Color32::from_rgb(8, 8, 16),
+            faint_bg: egui::Color32::from_rgba_premultiplied(20, 20, 35, 100),
+            title_color: egui::Color32::WHITE,
+        }
+    }
 
-/// Text hierarchy.
-const TEXT_PRIMARY: egui::Color32 = egui::Color32::from_rgb(210, 210, 225);
-const TEXT_SECONDARY: egui::Color32 = egui::Color32::from_rgb(130, 130, 155);
-
-/// Panel background (semi-transparent deep dark blue).
-const PANEL_BG: egui::Color32 = egui::Color32::from_rgba_premultiplied(10, 10, 20, 210);
-const PANEL_STROKE: egui::Color32 = egui::Color32::from_rgba_premultiplied(70, 70, 130, 50);
-
-/// Widget fills.
-const WIDGET_BG: egui::Color32 = egui::Color32::from_rgba_premultiplied(30, 30, 50, 180);
-const WIDGET_BG_HOVER: egui::Color32 = egui::Color32::from_rgba_premultiplied(45, 45, 75, 200);
-const WIDGET_BG_ACTIVE: egui::Color32 = egui::Color32::from_rgba_premultiplied(60, 60, 105, 220);
-
-/// Separator color.
-const SEPARATOR: egui::Color32 = egui::Color32::from_rgba_premultiplied(70, 70, 130, 40);
-
-/// Button accents.
-const RESET_COLOR: egui::Color32 = egui::Color32::from_rgb(210, 180, 60);
-const QUIT_COLOR: egui::Color32 = egui::Color32::from_rgb(170, 65, 65);
-
-/// FPS overlay.
-const FPS_GREEN: egui::Color32 = egui::Color32::from_rgb(80, 240, 120);
-const FPS_BG: egui::Color32 = egui::Color32::from_rgba_premultiplied(0, 0, 0, 160);
+    /// Light mode color palette - clean, high contrast design with solid panels.
+    fn light() -> Self {
+        Self {
+            accent: egui::Color32::from_rgb(60, 90, 200),
+            accent_hover: egui::Color32::from_rgb(80, 115, 235),
+            accent_dim: egui::Color32::from_rgb(45, 70, 170),
+            section_header: egui::Color32::from_rgb(50, 75, 180),
+            text_primary: egui::Color32::from_rgb(30, 30, 45),
+            text_secondary: egui::Color32::from_rgb(100, 100, 120),
+            panel_bg: egui::Color32::from_rgb(245, 245, 250),
+            panel_stroke: egui::Color32::from_rgba_premultiplied(180, 180, 200, 150),
+            widget_bg: egui::Color32::from_rgb(255, 255, 255),
+            widget_bg_hover: egui::Color32::from_rgb(240, 240, 245),
+            widget_bg_active: egui::Color32::from_rgb(230, 230, 240),
+            separator: egui::Color32::from_rgb(220, 220, 230),
+            reset_color: egui::Color32::from_rgb(180, 140, 20),
+            quit_color: egui::Color32::from_rgb(160, 50, 50),
+            fps_green: egui::Color32::from_rgb(40, 160, 60),
+            fps_bg: egui::Color32::from_rgba_premultiplied(255, 255, 255, 200),
+            extreme_bg: egui::Color32::from_rgb(240, 240, 245),
+            faint_bg: egui::Color32::from_rgb(235, 235, 240),
+            title_color: egui::Color32::from_rgb(20, 20, 35),
+        }
+    }
+}
 
 // ── App State ──────────────────────────────────────────────────────────────────
 
@@ -50,6 +93,7 @@ pub struct HopalongApp {
     show_fps: bool,
     should_quit: bool,
     theme_applied: bool,
+    current_dark_mode: Option<bool>, // Track current theme to detect changes
 }
 
 impl HopalongApp {
@@ -76,73 +120,93 @@ impl HopalongApp {
             show_fps: false,
             should_quit: false,
             theme_applied: false,
+            current_dark_mode: None,
         }
     }
 
     // ── Theme ──────────────────────────────────────────────────────────────────
 
-    /// Apply the custom cosmic theme once at startup.
+    /// Apply adaptive theme based on system preference (dark/light mode).
+    /// Re-applies when theme changes.
     fn apply_theme(&mut self, ctx: &egui::Context) {
-        if self.theme_applied {
+        // Detect current theme from egui's resolved visuals
+        let system_dark_mode = ctx.style().visuals.dark_mode;
+
+        // Only reapply if theme changed or first run
+        if self.theme_applied && self.current_dark_mode == Some(system_dark_mode) {
             return;
         }
+
         self.theme_applied = true;
+        self.current_dark_mode = Some(system_dark_mode);
+
+        // Select appropriate color palette
+        let colors = if system_dark_mode {
+            ThemeColors::dark()
+        } else {
+            ThemeColors::light()
+        };
 
         ctx.style_mut(|style| {
             let v = &mut style.visuals;
 
-            // Base
-            v.dark_mode = true;
-            v.panel_fill = PANEL_BG;
-            v.window_fill = PANEL_BG;
-            v.extreme_bg_color = egui::Color32::from_rgb(8, 8, 16);
-            v.faint_bg_color = egui::Color32::from_rgba_premultiplied(20, 20, 35, 100);
+            // Base mode
+            v.dark_mode = system_dark_mode;
+            v.panel_fill = colors.panel_bg;
+            v.window_fill = colors.panel_bg;
+            v.extreme_bg_color = colors.extreme_bg;
+            v.faint_bg_color = colors.faint_bg;
 
             // Selection accent
-            v.selection.bg_fill = ACCENT;
-            v.selection.stroke = egui::Stroke::new(1.0, ACCENT_HOVER);
+            v.selection.bg_fill = colors.accent;
+            v.selection.stroke = egui::Stroke::new(1.0, colors.accent_hover);
 
             // ── Widget states ──
 
             // Inactive
-            v.widgets.inactive.bg_fill = WIDGET_BG;
-            v.widgets.inactive.weak_bg_fill = WIDGET_BG;
-            v.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, TEXT_PRIMARY);
-            v.widgets.inactive.bg_stroke = egui::Stroke::new(0.5, PANEL_STROKE);
+            v.widgets.inactive.bg_fill = colors.widget_bg;
+            v.widgets.inactive.weak_bg_fill = colors.widget_bg;
+            v.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, colors.text_primary);
+            v.widgets.inactive.bg_stroke = egui::Stroke::new(0.5, colors.panel_stroke);
             v.widgets.inactive.corner_radius = egui::CornerRadius::same(4);
 
             // Hovered
-            v.widgets.hovered.bg_fill = WIDGET_BG_HOVER;
-            v.widgets.hovered.weak_bg_fill = WIDGET_BG_HOVER;
-            v.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, egui::Color32::WHITE);
-            v.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, ACCENT_DIM);
+            v.widgets.hovered.bg_fill = colors.widget_bg_hover;
+            v.widgets.hovered.weak_bg_fill = colors.widget_bg_hover;
+            v.widgets.hovered.fg_stroke = egui::Stroke::new(1.5, colors.text_primary);
+            v.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, colors.accent_dim);
             v.widgets.hovered.corner_radius = egui::CornerRadius::same(4);
 
             // Active (pressed)
-            v.widgets.active.bg_fill = WIDGET_BG_ACTIVE;
-            v.widgets.active.weak_bg_fill = WIDGET_BG_ACTIVE;
-            v.widgets.active.fg_stroke = egui::Stroke::new(2.0, egui::Color32::WHITE);
-            v.widgets.active.bg_stroke = egui::Stroke::new(1.0, ACCENT);
+            v.widgets.active.bg_fill = colors.widget_bg_active;
+            v.widgets.active.weak_bg_fill = colors.widget_bg_active;
+            v.widgets.active.fg_stroke = egui::Stroke::new(2.0, colors.accent);
+            v.widgets.active.bg_stroke = egui::Stroke::new(1.0, colors.accent);
             v.widgets.active.corner_radius = egui::CornerRadius::same(4);
 
             // Open (expanded collapsing headers)
-            v.widgets.open.bg_fill = egui::Color32::from_rgba_premultiplied(35, 35, 60, 140);
-            v.widgets.open.weak_bg_fill = egui::Color32::from_rgba_premultiplied(35, 35, 60, 140);
-            v.widgets.open.fg_stroke = egui::Stroke::new(1.0, SECTION_HEADER);
+            let open_bg = if system_dark_mode {
+                egui::Color32::from_rgba_premultiplied(35, 35, 60, 140)
+            } else {
+                egui::Color32::from_rgba_premultiplied(230, 230, 245, 150)
+            };
+            v.widgets.open.bg_fill = open_bg;
+            v.widgets.open.weak_bg_fill = open_bg;
+            v.widgets.open.fg_stroke = egui::Stroke::new(1.0, colors.section_header);
             v.widgets.open.corner_radius = egui::CornerRadius::same(4);
 
             // Non-interactive (labels, separators)
             v.widgets.noninteractive.bg_fill = egui::Color32::TRANSPARENT;
-            v.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, TEXT_SECONDARY);
-            v.widgets.noninteractive.bg_stroke = egui::Stroke::new(0.5, SEPARATOR);
+            v.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, colors.text_secondary);
+            v.widgets.noninteractive.bg_stroke = egui::Stroke::new(0.5, colors.separator);
             v.widgets.noninteractive.corner_radius = egui::CornerRadius::same(4);
 
-            // Slider handle
+            // Slider handle - ensure visibility in both modes
             v.handle_shape = egui::style::HandleShape::Rect { aspect_ratio: 0.5 };
 
             // Window chrome
             v.window_corner_radius = egui::CornerRadius::same(8);
-            v.window_stroke = egui::Stroke::new(1.0, PANEL_STROKE);
+            v.window_stroke = egui::Stroke::new(1.0, colors.panel_stroke);
 
             // ── Spacing ──
             style.spacing.item_spacing = egui::vec2(8.0, 5.0);
@@ -224,10 +288,18 @@ impl HopalongApp {
         let content_width = 260.0;
         let panel_height = viewport.height() - padding * 2.0;
 
+        // Get current theme colors
+        let system_dark_mode = self.current_dark_mode.unwrap_or(true);
+        let colors = if system_dark_mode {
+            ThemeColors::dark()
+        } else {
+            ThemeColors::light()
+        };
+
         let panel_frame = egui::Frame::default()
-            .fill(PANEL_BG)
+            .fill(colors.panel_bg)
             .inner_margin(egui::Margin::same(frame_margin))
-            .stroke(egui::Stroke::new(1.0, PANEL_STROKE))
+            .stroke(egui::Stroke::new(1.0, colors.panel_stroke))
             .corner_radius(egui::CornerRadius::same(8));
 
         egui::Area::new(egui::Id::new("settings_panel"))
@@ -242,7 +314,7 @@ impl HopalongApp {
                     // ── Title (pinned above scroll) ──
                     ui.heading(
                         egui::RichText::new("Hopalong Orbits")
-                            .color(egui::Color32::WHITE)
+                            .color(colors.title_color)
                             .size(18.0),
                     );
                     ui.add_space(4.0);
@@ -289,16 +361,27 @@ impl HopalongApp {
     }
 
     fn ui_section_simulation(&mut self, ui: &mut egui::Ui) {
+        let system_dark_mode = self.current_dark_mode.unwrap_or(true);
+        let colors = if system_dark_mode {
+            ThemeColors::dark()
+        } else {
+            ThemeColors::light()
+        };
+
         egui::CollapsingHeader::new(
             egui::RichText::new("Simulation")
-                .color(SECTION_HEADER)
+                .color(colors.section_header)
                 .size(14.0),
         )
         .default_open(true)
         .show(ui, |ui| {
             ui.add_space(2.0);
 
-            ui.label(egui::RichText::new("Speed").color(TEXT_PRIMARY).size(12.0));
+            ui.label(
+                egui::RichText::new("Speed")
+                    .color(colors.text_primary)
+                    .size(12.0),
+            );
             ui.add(egui::Slider::new(&mut self.sim.settings.speed, 0.0..=50.0).step_by(0.25))
                 .on_hover_text("Arrow Up / Down");
 
@@ -306,7 +389,7 @@ impl HopalongApp {
 
             ui.label(
                 egui::RichText::new("Rotation Speed")
-                    .color(TEXT_PRIMARY)
+                    .color(colors.text_primary)
                     .size(12.0),
             );
             let mut rot_display = self.sim.settings.rotation_speed * -2000.0;
@@ -323,9 +406,16 @@ impl HopalongApp {
     }
 
     fn ui_section_camera(&mut self, ui: &mut egui::Ui) {
+        let system_dark_mode = self.current_dark_mode.unwrap_or(true);
+        let colors = if system_dark_mode {
+            ThemeColors::dark()
+        } else {
+            ThemeColors::light()
+        };
+
         egui::CollapsingHeader::new(
             egui::RichText::new("Camera")
-                .color(SECTION_HEADER)
+                .color(colors.section_header)
                 .size(14.0),
         )
         .default_open(true)
@@ -334,7 +424,7 @@ impl HopalongApp {
 
             ui.label(
                 egui::RichText::new("Field of View")
-                    .color(TEXT_PRIMARY)
+                    .color(colors.text_primary)
                     .size(12.0),
             );
             let mut fov = self.sim.settings.camera_fov;
@@ -379,9 +469,16 @@ impl HopalongApp {
     }
 
     fn ui_section_particles(&mut self, ui: &mut egui::Ui) {
+        let system_dark_mode = self.current_dark_mode.unwrap_or(true);
+        let colors = if system_dark_mode {
+            ThemeColors::dark()
+        } else {
+            ThemeColors::light()
+        };
+
         egui::CollapsingHeader::new(
             egui::RichText::new("Particles")
-                .color(SECTION_HEADER)
+                .color(colors.section_header)
                 .size(14.0),
         )
         .default_open(false)
@@ -390,7 +487,7 @@ impl HopalongApp {
 
             ui.label(
                 egui::RichText::new("Points per Subset (thousands)")
-                    .color(TEXT_PRIMARY)
+                    .color(colors.text_primary)
                     .size(12.0),
             );
             let mut pts_k = self.sim.settings.points_per_subset as f32 / 1000.0;
@@ -409,7 +506,7 @@ impl HopalongApp {
 
             ui.label(
                 egui::RichText::new("Subset Count")
-                    .color(TEXT_PRIMARY)
+                    .color(colors.text_primary)
                     .size(12.0),
             );
             let mut subsets = self.sim.settings.subset_count as f32;
@@ -428,7 +525,7 @@ impl HopalongApp {
 
             ui.label(
                 egui::RichText::new("Level Count")
-                    .color(TEXT_PRIMARY)
+                    .color(colors.text_primary)
                     .size(12.0),
             );
             let mut levels = self.sim.settings.level_count as f32;
@@ -450,7 +547,7 @@ impl HopalongApp {
                     "Total: {}",
                     format_number(self.sim.total_particles())
                 ))
-                .color(TEXT_SECONDARY)
+                .color(colors.text_secondary)
                 .size(11.0),
             );
 
@@ -459,31 +556,49 @@ impl HopalongApp {
     }
 
     fn ui_section_info(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new(egui::RichText::new("Info").color(SECTION_HEADER).size(14.0))
-            .default_open(false)
-            .show(ui, |ui| {
-                ui.add_space(2.0);
+        let system_dark_mode = self.current_dark_mode.unwrap_or(true);
+        let colors = if system_dark_mode {
+            ThemeColors::dark()
+        } else {
+            ThemeColors::light()
+        };
 
-                ui.checkbox(&mut self.show_fps, "Show FPS Counter");
+        egui::CollapsingHeader::new(
+            egui::RichText::new("Info")
+                .color(colors.section_header)
+                .size(14.0),
+        )
+        .default_open(false)
+        .show(ui, |ui| {
+            ui.add_space(2.0);
 
-                ui.label(
-                    egui::RichText::new(format!(
-                        "Particles: {}",
-                        format_number(self.sim.total_particles())
-                    ))
-                    .color(TEXT_SECONDARY)
-                    .size(12.0),
-                );
+            ui.checkbox(&mut self.show_fps, "Show FPS Counter");
 
-                ui.add_space(2.0);
-            });
+            ui.label(
+                egui::RichText::new(format!(
+                    "Particles: {}",
+                    format_number(self.sim.total_particles())
+                ))
+                .color(colors.text_secondary)
+                .size(12.0),
+            );
+
+            ui.add_space(2.0);
+        });
     }
 
     fn ui_action_buttons(&mut self, ui: &mut egui::Ui) {
+        let system_dark_mode = self.current_dark_mode.unwrap_or(true);
+        let colors = if system_dark_mode {
+            ThemeColors::dark()
+        } else {
+            ThemeColors::light()
+        };
+
         // Reset — amber accent, full width, taller target.
         let reset_btn = egui::Button::new(
             egui::RichText::new("Reset Defaults")
-                .color(RESET_COLOR)
+                .color(colors.reset_color)
                 .size(13.0),
         )
         .min_size(egui::vec2(ui.available_width(), 28.0));
@@ -494,17 +609,28 @@ impl HopalongApp {
         ui.add_space(4.0);
 
         // Quit — subdued red, slightly smaller.
-        let quit_btn = egui::Button::new(egui::RichText::new("Quit").color(QUIT_COLOR).size(12.0))
-            .min_size(egui::vec2(ui.available_width(), 24.0));
+        let quit_btn = egui::Button::new(
+            egui::RichText::new("Quit")
+                .color(colors.quit_color)
+                .size(12.0),
+        )
+        .min_size(egui::vec2(ui.available_width(), 24.0));
         if ui.add(quit_btn).on_hover_text("Q").clicked() {
             self.should_quit = true;
         }
     }
 
     fn ui_section_shortcuts(&mut self, ui: &mut egui::Ui) {
+        let system_dark_mode = self.current_dark_mode.unwrap_or(true);
+        let colors = if system_dark_mode {
+            ThemeColors::dark()
+        } else {
+            ThemeColors::light()
+        };
+
         egui::CollapsingHeader::new(
             egui::RichText::new("Keyboard Shortcuts")
-                .color(SECTION_HEADER)
+                .color(colors.section_header)
                 .size(14.0),
         )
         .default_open(false)
@@ -528,11 +654,15 @@ impl HopalongApp {
                     for (key, desc) in shortcuts {
                         ui.label(
                             egui::RichText::new(key)
-                                .color(ACCENT)
+                                .color(colors.accent)
                                 .size(12.0)
                                 .monospace(),
                         );
-                        ui.label(egui::RichText::new(desc).color(TEXT_SECONDARY).size(12.0));
+                        ui.label(
+                            egui::RichText::new(desc)
+                                .color(colors.text_secondary)
+                                .size(12.0),
+                        );
                         ui.end_row();
                     }
                 });
@@ -557,19 +687,33 @@ impl HopalongApp {
         ));
         let screen = ctx.input(|i| i.viewport_rect());
 
+        // Get current theme colors
+        let system_dark_mode = self.current_dark_mode.unwrap_or(true);
+        let colors = if system_dark_mode {
+            ThemeColors::dark()
+        } else {
+            ThemeColors::light()
+        };
+
         // Monospace font for stable width (tabular-nums equivalent).
         let text = format!("{:.0} FPS", fps);
         let font_id = egui::FontId::monospace(13.0);
         let anchor = egui::pos2(screen.max.x - 12.0, 10.0);
 
         // Measure text to draw background pill.
-        let galley = painter.layout_no_wrap(text.clone(), font_id.clone(), FPS_GREEN);
+        let galley = painter.layout_no_wrap(text.clone(), font_id.clone(), colors.fps_green);
         let text_rect = egui::Align2::RIGHT_TOP.anchor_size(anchor, galley.size());
         let pill_rect = text_rect.expand2(egui::vec2(6.0, 3.0));
-        painter.rect_filled(pill_rect, 4.0, FPS_BG);
+        painter.rect_filled(pill_rect, 4.0, colors.fps_bg);
 
         // Draw text over pill.
-        painter.text(anchor, egui::Align2::RIGHT_TOP, text, font_id, FPS_GREEN);
+        painter.text(
+            anchor,
+            egui::Align2::RIGHT_TOP,
+            text,
+            font_id,
+            colors.fps_green,
+        );
     }
 }
 
