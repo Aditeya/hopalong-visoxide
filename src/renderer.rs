@@ -322,17 +322,6 @@ impl HopalongRendererResources {
 
 // ── Build Instance Data ────────────────────────────────────────────────────────
 
-/// Build the flat array of `ParticleInstance` from the current simulation state.
-///
-/// Each particle set has its own baked copy of orbit points and hue. Sets that
-/// haven't wrapped around yet after an orbit regeneration still render their
-/// old baked data, creating the gradual fly-through transition between patterns.
-pub fn build_instances(sim: &HopalongSim) -> Vec<ParticleInstance> {
-    let mut instances = Vec::with_capacity(sim.total_particles());
-    build_instances_into(sim, &mut instances);
-    instances
-}
-
 /// Build particle instances into a pre-allocated buffer.
 ///
 /// This is more efficient than `build_instances` when the buffer can be reused

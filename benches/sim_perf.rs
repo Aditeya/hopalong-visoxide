@@ -42,11 +42,14 @@ fn bench_build_instances(c: &mut Criterion) {
 
     // Create a simulation with default settings
     let sim = HopalongSim::new();
+    let max_instances = sim.total_particles();
 
     group.bench_function("default_196k_particles", |b| {
+        let mut buffer = Vec::with_capacity(max_instances);
         b.iter(|| {
-            let instances = hopalong_visoxide::renderer::build_instances(black_box(&sim));
-            black_box(instances);
+            buffer.clear();
+            hopalong_visoxide::renderer::build_instances_into(black_box(&sim), &mut buffer);
+            black_box(&buffer);
         });
     });
 
@@ -56,11 +59,14 @@ fn bench_build_instances(c: &mut Criterion) {
     small_sim.settings.subset_count = 3;
     small_sim.settings.level_count = 3;
     small_sim.full_rebuild();
+    let small_max_instances = small_sim.total_particles();
 
     group.bench_function("small_9k_particles", |b| {
+        let mut buffer = Vec::with_capacity(small_max_instances);
         b.iter(|| {
-            let instances = hopalong_visoxide::renderer::build_instances(black_box(&small_sim));
-            black_box(instances);
+            buffer.clear();
+            hopalong_visoxide::renderer::build_instances_into(black_box(&small_sim), &mut buffer);
+            black_box(&buffer);
         });
     });
 
