@@ -244,16 +244,18 @@ impl HopalongApp {
                 {
                     match key {
                         egui::Key::ArrowUp => {
-                            self.sim.settings.speed += 0.25;
+                            // Legacy: 0.25 per frame = 15.0 per second (at 60fps)
+                            self.sim.settings.speed += 15.0;
                         }
                         egui::Key::ArrowDown => {
-                            self.sim.settings.speed = (self.sim.settings.speed - 0.25).max(0.0);
+                            self.sim.settings.speed = (self.sim.settings.speed - 15.0).max(0.0);
                         }
                         egui::Key::ArrowLeft => {
-                            self.sim.settings.rotation_speed += 0.0005;
+                            // Legacy: 0.0005 per frame = 0.03 per second (at 60fps)
+                            self.sim.settings.rotation_speed += 0.03;
                         }
                         egui::Key::ArrowRight => {
-                            self.sim.settings.rotation_speed -= 0.0005;
+                            self.sim.settings.rotation_speed -= 0.03;
                         }
                         egui::Key::R => {
                             self.sim.reset_defaults();
@@ -388,8 +390,15 @@ impl HopalongApp {
                     .color(colors.text_primary)
                     .size(12.0),
             );
-            ui.add(egui::Slider::new(&mut self.sim.settings.speed, 0.0..=50.0).step_by(0.25))
-                .on_hover_text("Arrow Up / Down");
+            // Convert internal per-second units to legacy per-frame display (divide by 60)
+            let mut speed_display = self.sim.settings.speed / 60.0;
+            if ui
+                .add(egui::Slider::new(&mut speed_display, 0.0..=50.0).step_by(0.25))
+                .on_hover_text("Arrow Up / Down")
+                .changed()
+            {
+                self.sim.settings.speed = speed_display * 60.0;
+            }
 
             ui.add_space(4.0);
 
@@ -398,13 +407,15 @@ impl HopalongApp {
                     .color(colors.text_primary)
                     .size(12.0),
             );
-            let mut rot_display = self.sim.settings.rotation_speed * -2000.0;
+            // Convert internal per-second to legacy display: (rotation * -2000) / 60
+            // This keeps the display value matching pre-optimization behavior
+            let mut rot_display = (self.sim.settings.rotation_speed * -2000.0) / 60.0;
             if ui
                 .add(egui::Slider::new(&mut rot_display, -100.0..=100.0).step_by(1.0))
                 .on_hover_text("Arrow Left / Right")
                 .changed()
             {
-                self.sim.settings.rotation_speed = rot_display / -2000.0;
+                self.sim.settings.rotation_speed = (rot_display * 60.0) / -2000.0;
             }
 
             ui.add_space(2.0);
