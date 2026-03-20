@@ -107,6 +107,12 @@ pub struct HopalongSim {
     pub instances_dirty: bool,
 }
 
+impl Default for HopalongSim {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HopalongSim {
     pub fn new() -> Self {
         let settings = SimSettings::default();

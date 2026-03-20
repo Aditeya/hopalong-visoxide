@@ -1,8 +1,5 @@
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use hopalong_visoxide::sim::{
-    DEFAULT_FOV, DEFAULT_LEVELS, DEFAULT_POINTS_SUBSET, DEFAULT_ROTATION_SPEED, DEFAULT_SPEED,
-    DEFAULT_SUBSETS, HopalongSim, OrbitParams, SimSettings, generate_orbit, hsv_to_rgba,
-};
+use hopalong_visoxide::sim::{HopalongSim, OrbitParams, generate_orbit, hsv_to_rgba};
 
 /// Benchmark orbit generation at different scales
 fn bench_generate_orbit(c: &mut Criterion) {
@@ -82,7 +79,7 @@ fn bench_sim_update(c: &mut Criterion) {
     // This prevents state mutation from leaking across iterations
     group.bench_function("single_step_196k", |b| {
         b.iter_batched(
-            || HopalongSim::new(),
+            HopalongSim::new,
             |mut sim| {
                 sim.update(black_box(dt));
             },
@@ -93,7 +90,7 @@ fn bench_sim_update(c: &mut Criterion) {
     // Benchmark 60 frames (1 second) - fresh sim each iteration
     group.bench_function("60_frames_196k", |b| {
         b.iter_batched(
-            || HopalongSim::new(),
+            HopalongSim::new,
             |mut sim| {
                 for _ in 0..60 {
                     sim.update(black_box(dt));
@@ -131,7 +128,7 @@ fn bench_full_rebuild(c: &mut Criterion) {
     // Use iter_batched to ensure fair measurement of rebuild cost
     group.bench_function("default_196k", |b| {
         b.iter_batched(
-            || HopalongSim::new(),
+            HopalongSim::new,
             |mut sim| {
                 sim.full_rebuild();
                 black_box(&sim);
