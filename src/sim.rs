@@ -328,13 +328,8 @@ pub fn generate_orbit(
                 params.d + (2.0 + (params.b * x - params.c).abs().sqrt()).ln()
             };
 
-            let x1 = if x > 0.0 {
-                y - z
-            } else if x == 0.0 {
-                y
-            } else {
-                y + z
-            };
+            // Branchless computation: signum() returns 1.0, -1.0, or 0.0
+            let x1 = y - z * x.signum();
             y = params.a - x;
             x = x1 + params.e;
 
