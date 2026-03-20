@@ -70,23 +70,31 @@ fn bench_build_instances(c: &mut Criterion) {
 /// Benchmark simulation update step
 fn bench_sim_update(c: &mut Criterion) {
     let mut group = c.benchmark_group("sim_update");
-
-    let mut sim = HopalongSim::new();
     let dt = 1.0 / 60.0; // 60fps
 
+    // Use iter_batched to create fresh sim for each iteration
+    // This prevents state mutation from leaking across iterations
     group.bench_function("single_step_196k", |b| {
-        b.iter(|| {
-            sim.update(black_box(dt));
-        });
+        b.iter_batched(
+            || HopalongSim::new(),
+            |mut sim| {
+                sim.update(black_box(dt));
+            },
+            criterion::BatchSize::SmallInput,
+        );
     });
 
-    // Benchmark 60 frames (1 second)
+    // Benchmark 60 frames (1 second) - fresh sim each iteration
     group.bench_function("60_frames_196k", |b| {
-        b.iter(|| {
-            for _ in 0..60 {
-                sim.update(black_box(dt));
-            }
-        });
+        b.iter_batched(
+            || HopalongSim::new(),
+            |mut sim| {
+                for _ in 0..60 {
+                    sim.update(black_box(dt));
+                }
+            },
+            criterion::BatchSize::SmallInput,
+        );
     });
 
     group.finish();
@@ -114,25 +122,34 @@ fn bench_hsv_to_rgba(c: &mut Criterion) {
 fn bench_full_rebuild(c: &mut Criterion) {
     let mut group = c.benchmark_group("full_rebuild");
 
-    let mut sim = HopalongSim::new();
-
+    // Use iter_batched to ensure fair measurement of rebuild cost
     group.bench_function("default_196k", |b| {
-        b.iter(|| {
-            sim.full_rebuild();
-            black_box(&sim);
-        });
+        b.iter_batched(
+            || HopalongSim::new(),
+            |mut sim| {
+                sim.full_rebuild();
+                black_box(&sim);
+            },
+            criterion::BatchSize::SmallInput,
+        );
     });
 
     // Test with smaller configuration
-    sim.settings.points_per_subset = 1000;
-    sim.settings.subset_count = 3;
-    sim.settings.level_count = 3;
-
     group.bench_function("small_9k", |b| {
-        b.iter(|| {
-            sim.full_rebuild();
-            black_box(&sim);
-        });
+        b.iter_batched(
+            || {
+                let mut sim = HopalongSim::new();
+                sim.settings.points_per_subset = 1000;
+                sim.settings.subset_count = 3;
+                sim.settings.level_count = 3;
+                sim
+            },
+            |mut sim| {
+                sim.full_rebuild();
+                black_box(&sim);
+            },
+            criterion::BatchSize::SmallInput,
+        );
     });
 
     group.finish();

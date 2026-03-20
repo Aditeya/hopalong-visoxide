@@ -16,8 +16,8 @@ const C_RANGE: (f32, f32) = (5.0, 17.0);
 const D_RANGE: (f32, f32) = (0.0, 10.0);
 const E_RANGE: (f32, f32) = (0.0, 12.0);
 
-pub const DEFAULT_SPEED: f32 = 8.0;
-pub const DEFAULT_ROTATION_SPEED: f32 = 0.005;
+pub const DEFAULT_SPEED: f32 = 480.0; // units per second (was 8.0 per frame at 60fps)
+pub const DEFAULT_ROTATION_SPEED: f32 = 0.3; // radians per second (was 0.005 per frame at 60fps)
 pub const DEFAULT_FOV: f32 = 60.0;
 pub const DEFAULT_POINTS_SUBSET: usize = 4000;
 pub const DEFAULT_SUBSETS: usize = 7;
@@ -25,6 +25,7 @@ pub const DEFAULT_LEVELS: usize = 7;
 
 const ORBIT_REGEN_INTERVAL: f32 = 3.0; // seconds
 const CAMERA_LERP_FACTOR: f32 = 0.05;
+const MAX_DT: f32 = 1.0 / 20.0; // 50ms max dt to prevent huge jumps after stalls
 
 // ── Data Structures ────────────────────────────────────────────────────────────
 
@@ -198,17 +199,24 @@ impl HopalongSim {
 
     /// Called every frame with the elapsed dt.
     pub fn update(&mut self, dt: f32) {
+        // Clamp dt to prevent huge jumps after stalls (e.g., window drag)
+        let dt = dt.min(MAX_DT);
+
         // ── Camera lerp toward mouse ──
         if !self.settings.mouse_locked {
-            self.camera_x += (self.mouse_x - self.camera_x) * CAMERA_LERP_FACTOR;
-            self.camera_y += (-self.mouse_y - self.camera_y) * CAMERA_LERP_FACTOR;
+            // Exponential decay lerp: factor = 1 - exp(-rate * dt)
+            // At 60fps with old factor of 0.05, this gives similar feel
+            let t = 1.0 - (-CAMERA_LERP_FACTOR * dt * 60.0).exp();
+            self.camera_x += (self.mouse_x - self.camera_x) * t;
+            self.camera_y += (-self.mouse_y - self.camera_y) * t;
         }
         self.camera_x = self.camera_x.clamp(-CAMERA_BOUND, CAMERA_BOUND);
         self.camera_y = self.camera_y.clamp(-CAMERA_BOUND, CAMERA_BOUND);
 
         // ── Advance particle sets ──
-        let speed = self.settings.speed;
-        let rot = self.settings.rotation_speed;
+        // Frame-rate independent movement using per-second units
+        let speed = self.settings.speed * dt;
+        let rot = self.settings.rotation_speed * dt;
         let cam_z = self.camera_z;
         let num_levels = self.settings.level_count;
 
@@ -553,5 +561,90 @@ mod tests {
         assert_eq!(sim.orbit_subsets.len(), 2);
         assert_eq!(sim.particle_sets.len(), 4); // 2x2
         assert_eq!(sim.total_particles(), 4000); // 2x2x1000
+    }
+
+    #[test]
+    fn test_dt_independence() {
+        // Verify that particle movement is frame-rate independent
+        // by checking that speed * dt produces consistent results
+        let mut sim = HopalongSim::new();
+
+        // Disable mouse lock and orbit regeneration to isolate particle movement
+        sim.settings.mouse_locked = true;
+        sim.regen_timer = -1000.0; // Prevent regeneration during test
+
+        // Set a known speed
+        let speed = 10.0; // Use slower speed to avoid wraparound
+        sim.settings.speed = speed;
+        sim.settings.rotation_speed = 0.0; // Disable rotation for this test
+
+        // Set initial position well behind camera to avoid wraparound
+        let initial_z = -500.0;
+        sim.particle_sets[0].z_position = initial_z;
+
+        // Update with dt = 0.016 (60fps)
+        let dt = 0.016;
+        sim.update(dt);
+
+        // Calculate expected movement
+        let expected_movement = speed * dt;
+        let actual_movement = sim.particle_sets[0].z_position - initial_z;
+
+        // Verify the movement matches expected (within floating point tolerance)
+        let diff = (actual_movement - expected_movement).abs();
+        assert!(
+            diff < 0.001,
+            "Movement should be speed * dt: expected = {}, actual = {}, diff = {}",
+            expected_movement,
+            actual_movement,
+            diff
+        );
+
+        // Now verify that two smaller steps equal one larger step
+        let mut sim2 = HopalongSim::new();
+        sim2.settings.mouse_locked = true;
+        sim2.regen_timer = -1000.0;
+        sim2.settings.speed = speed;
+        sim2.settings.rotation_speed = 0.0;
+
+        // Set same initial position
+        sim2.particle_sets[0].z_position = initial_z;
+
+        // Two steps of dt/2
+        sim2.update(dt / 2.0);
+        sim2.update(dt / 2.0);
+
+        let two_step_movement = sim2.particle_sets[0].z_position - initial_z;
+        let step_diff = (actual_movement - two_step_movement).abs();
+
+        assert!(
+            step_diff < 0.001,
+            "Two half-steps should equal one full step: full = {}, two_half = {}, diff = {}",
+            actual_movement,
+            two_step_movement,
+            step_diff
+        );
+    }
+
+    #[test]
+    fn test_dt_clamping() {
+        // Verify that large dt values are clamped
+        let mut sim = HopalongSim::new();
+        sim.settings.speed = 1000.0;
+
+        let initial_z = sim.particle_sets[0].z_position;
+
+        // Update with a huge dt (should be clamped to MAX_DT = 50ms)
+        sim.update(1.0); // 1 second
+
+        let movement = sim.particle_sets[0].z_position - initial_z;
+        let expected_max_movement = 1000.0 * (1.0 / 20.0); // speed * MAX_DT
+
+        assert!(
+            movement <= expected_max_movement * 1.01, // allow 1% tolerance
+            "Movement should be clamped: actual = {}, max = {}",
+            movement,
+            expected_max_movement
+        );
     }
 }

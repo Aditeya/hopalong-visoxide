@@ -328,9 +328,19 @@ impl HopalongRendererResources {
 /// haven't wrapped around yet after an orbit regeneration still render their
 /// old baked data, creating the gradual fly-through transition between patterns.
 pub fn build_instances(sim: &HopalongSim) -> Vec<ParticleInstance> {
-    let num_points = sim.settings.points_per_subset;
-
     let mut instances = Vec::with_capacity(sim.total_particles());
+    build_instances_into(sim, &mut instances);
+    instances
+}
+
+/// Build particle instances into a pre-allocated buffer.
+///
+/// This is more efficient than `build_instances` when the buffer can be reused
+/// across frames, avoiding per-frame allocation.
+pub fn build_instances_into(sim: &HopalongSim, buffer: &mut Vec<ParticleInstance>) {
+    buffer.clear();
+    let num_points = sim.settings.points_per_subset;
+    buffer.reserve(sim.total_particles());
 
     for ps in &sim.particle_sets {
         let color = sim::hsv_to_rgba(ps.hue, DEF_SATURATION, DEF_BRIGHTNESS);
@@ -343,15 +353,13 @@ pub fn build_instances(sim: &HopalongSim) -> Vec<ParticleInstance> {
             let rx = point[0] * cos_r - point[1] * sin_r;
             let ry = point[0] * sin_r + point[1] * cos_r;
 
-            instances.push(ParticleInstance {
+            buffer.push(ParticleInstance {
                 world_pos: [rx, ry, ps.z_position],
                 _pad: 0.0,
                 color,
             });
         }
     }
-
-    instances
 }
 
 /// Build the view-projection uniform data.
