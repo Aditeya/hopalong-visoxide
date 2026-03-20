@@ -285,7 +285,7 @@ impl HopalongSim {
 
 // ── Orbit Generation ───────────────────────────────────────────────────────────
 
-fn generate_orbit(
+pub fn generate_orbit(
     params: &OrbitParams,
     num_subsets: usize,
     num_points: usize,
@@ -372,4 +372,186 @@ pub fn hsv_to_rgba(h: f32, s: f32, v: f32) -> [f32; 4] {
         _ => (c, 0.0, x),
     };
     [r + m, g + m, b + m, 1.0]
+}
+
+// ── Unit Tests ─────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hsv_to_rgba_red() {
+        // Hue 0 = red
+        let rgba = hsv_to_rgba(0.0, 1.0, 1.0);
+        assert!((rgba[0] - 1.0).abs() < 0.01, "Red should be ~1.0");
+        assert!((rgba[1] - 0.0).abs() < 0.01, "Green should be ~0.0");
+        assert!((rgba[2] - 0.0).abs() < 0.01, "Blue should be ~0.0");
+        assert!((rgba[3] - 1.0).abs() < 0.01, "Alpha should be 1.0");
+    }
+
+    #[test]
+    fn test_hsv_to_rgba_green() {
+        // Hue 1/3 = green
+        let rgba = hsv_to_rgba(1.0 / 3.0, 1.0, 1.0);
+        assert!((rgba[0] - 0.0).abs() < 0.01, "Red should be ~0.0");
+        assert!((rgba[1] - 1.0).abs() < 0.01, "Green should be ~1.0");
+        assert!((rgba[2] - 0.0).abs() < 0.01, "Blue should be ~0.0");
+    }
+
+    #[test]
+    fn test_hsv_to_rgba_blue() {
+        // Hue 2/3 = blue
+        let rgba = hsv_to_rgba(2.0 / 3.0, 1.0, 1.0);
+        assert!((rgba[0] - 0.0).abs() < 0.01, "Red should be ~0.0");
+        assert!((rgba[1] - 0.0).abs() < 0.01, "Green should be ~0.0");
+        assert!((rgba[2] - 1.0).abs() < 0.01, "Blue should be ~1.0");
+    }
+
+    #[test]
+    fn test_hsv_to_rgba_white() {
+        // Zero saturation = white/gray
+        let rgba = hsv_to_rgba(0.5, 0.0, 1.0);
+        assert!((rgba[0] - 1.0).abs() < 0.01, "Red should be ~1.0");
+        assert!((rgba[1] - 1.0).abs() < 0.01, "Green should be ~1.0");
+        assert!((rgba[2] - 1.0).abs() < 0.01, "Blue should be ~1.0");
+    }
+
+    #[test]
+    fn test_sim_default_settings() {
+        let settings = SimSettings::default();
+        assert_eq!(settings.speed, DEFAULT_SPEED);
+        assert_eq!(settings.rotation_speed, DEFAULT_ROTATION_SPEED);
+        assert_eq!(settings.camera_fov, DEFAULT_FOV);
+        assert_eq!(settings.points_per_subset, DEFAULT_POINTS_SUBSET);
+        assert_eq!(settings.subset_count, DEFAULT_SUBSETS);
+        assert_eq!(settings.level_count, DEFAULT_LEVELS);
+        assert!(settings.mouse_locked);
+    }
+
+    #[test]
+    fn test_sim_new() {
+        let sim = HopalongSim::new();
+        assert!(sim.total_particles() > 0);
+        assert!(!sim.particle_sets.is_empty());
+        assert!(!sim.orbit_subsets.is_empty());
+        assert!(!sim.hue_values.is_empty());
+    }
+
+    #[test]
+    fn test_total_particles_math() {
+        let sim = HopalongSim::new();
+        let expected =
+            sim.settings.level_count * sim.settings.subset_count * sim.settings.points_per_subset;
+        assert_eq!(sim.total_particles(), expected);
+    }
+
+    #[test]
+    fn test_full_rebuild_consistency() {
+        let mut sim = HopalongSim::new();
+        sim.full_rebuild();
+
+        // Check counts match settings
+        assert_eq!(sim.orbit_subsets.len(), sim.settings.subset_count);
+        assert_eq!(sim.hue_values.len(), sim.settings.subset_count);
+        assert_eq!(
+            sim.particle_sets.len(),
+            sim.settings.level_count * sim.settings.subset_count
+        );
+
+        // Check all subsets have points
+        for subset in &sim.orbit_subsets {
+            assert!(!subset.is_empty());
+            assert_eq!(subset.len(), sim.settings.points_per_subset);
+        }
+    }
+
+    #[test]
+    fn test_camera_clamping() {
+        let mut sim = HopalongSim::new();
+        sim.settings.mouse_locked = false;
+
+        // Test extreme mouse positions
+        sim.mouse_x = 10000.0;
+        sim.mouse_y = 10000.0;
+        sim.update(0.016); // One frame at 60fps
+
+        assert!(
+            sim.camera_x.abs() <= CAMERA_BOUND,
+            "Camera X should be clamped to bounds"
+        );
+        assert!(
+            sim.camera_y.abs() <= CAMERA_BOUND,
+            "Camera Y should be clamped to bounds"
+        );
+    }
+
+    #[test]
+    fn test_orbit_points_are_finite() {
+        let params = OrbitParams {
+            a: 0.0,
+            b: 1.0,
+            c: 10.0,
+            d: 5.0,
+            e: 6.0,
+        };
+
+        let subsets = generate_orbit(&params, 3, 1000);
+
+        for subset in &subsets {
+            for point in subset {
+                assert!(point[0].is_finite(), "X coordinate should be finite");
+                assert!(point[1].is_finite(), "Y coordinate should be finite");
+                assert!(!point[0].is_nan(), "X coordinate should not be NaN");
+                assert!(!point[1].is_nan(), "Y coordinate should not be NaN");
+            }
+        }
+    }
+
+    #[test]
+    fn test_reset_defaults() {
+        let mut sim = HopalongSim::new();
+
+        // Change some settings
+        sim.settings.speed = 100.0;
+        sim.settings.points_per_subset = 100;
+
+        // Reset
+        sim.reset_defaults();
+
+        assert_eq!(sim.settings.speed, DEFAULT_SPEED);
+        assert_eq!(sim.settings.points_per_subset, DEFAULT_POINTS_SUBSET);
+    }
+
+    #[test]
+    fn test_sim_update_changes_state() {
+        let mut sim = HopalongSim::new();
+        let initial_z = sim.particle_sets[0].z_position;
+        let initial_rotation = sim.particle_sets[0].z_rotation;
+
+        sim.update(0.1); // 100ms step
+
+        // Particles should have moved
+        assert!(
+            sim.particle_sets[0].z_position != initial_z
+                || sim.particle_sets[0].z_rotation != initial_rotation,
+            "Particle set should have changed position or rotation"
+        );
+    }
+
+    #[test]
+    fn test_parameter_change_consistency() {
+        let mut sim = HopalongSim::new();
+
+        // Change to smaller configuration
+        sim.settings.points_per_subset = 1000;
+        sim.settings.subset_count = 2;
+        sim.settings.level_count = 2;
+        sim.full_rebuild();
+
+        // Verify consistency
+        assert_eq!(sim.orbit_subsets.len(), 2);
+        assert_eq!(sim.particle_sets.len(), 4); // 2x2
+        assert_eq!(sim.total_particles(), 4000); // 2x2x1000
+    }
 }
