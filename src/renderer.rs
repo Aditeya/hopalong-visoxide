@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use micromath::F32Ext;
+
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
@@ -334,8 +337,7 @@ pub fn build_instances_into(sim: &HopalongSim, buffer: &mut Vec<ParticleInstance
     for ps in &sim.particle_sets {
         let color = sim::hsv_to_rgba(ps.hue, DEF_SATURATION, DEF_BRIGHTNESS);
 
-        let cos_r = ps.z_rotation.cos();
-        let sin_r = ps.z_rotation.sin();
+        let (sin_r, cos_r) = ps.z_rotation.sin_cos();
 
         for point in ps.points.iter().take(num_points) {
             // Apply Z-axis rotation to the 2D orbit position.
