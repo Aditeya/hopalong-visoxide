@@ -7,9 +7,7 @@ use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use wgpu::util::DeviceExt;
 
-use crate::sim::{
-    self, HopalongSim, DEF_BRIGHTNESS, DEF_SATURATION, FOG_DENSITY, SCALE_FACTOR, SPRITE_SIZE,
-};
+use crate::sim::{HopalongSim, FOG_DENSITY, SCALE_FACTOR, SPRITE_SIZE};
 
 // ── Vertex Types ───────────────────────────────────────────────────────────────
 
@@ -335,7 +333,7 @@ pub fn build_instances_into(sim: &HopalongSim, buffer: &mut Vec<ParticleInstance
     buffer.reserve(sim.total_particles());
 
     for ps in &sim.particle_sets {
-        let color = sim::hsv_to_rgba(ps.hue, DEF_SATURATION, DEF_BRIGHTNESS);
+        let color = ps.cached_color;
 
         let (sin_r, cos_r) = ps.z_rotation.sin_cos();
 

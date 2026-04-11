@@ -82,6 +82,9 @@ pub struct ParticleSetState {
     pub points: Vec<[f32; 2]>,
     /// Baked hue value for this set's current color.
     pub hue: f32,
+    /// Cached RGBA color computed from hue, saturation, and brightness.
+    /// Only recomputed when hue changes (on wraparound or init).
+    pub cached_color: [f32; 4],
 }
 
 // ── Simulation State ───────────────────────────────────────────────────────────
@@ -200,6 +203,7 @@ impl HopalongSim {
                     subset_index: subset,
                     level_index: level,
                     points,
+                    cached_color: hsv_to_rgba(hue, DEF_SATURATION, DEF_BRIGHTNESS),
                     hue,
                 });
             }
@@ -247,6 +251,7 @@ impl HopalongSim {
                     }
                     if idx < self.hue_values.len() {
                         ps.hue = self.hue_values[idx];
+                        ps.cached_color = hsv_to_rgba(ps.hue, DEF_SATURATION, DEF_BRIGHTNESS);
                     }
                     ps.needs_update = false;
                 }
