@@ -50,16 +50,16 @@ fn vs_main(
     // Derive set and point indices from instance_index
     let set_idx = instance_index / uniforms.points_per_subplot;
     let point_idx = instance_index % uniforms.points_per_subplot;
-    let meta = set_metadata[set_idx];
+    let set_md = set_metadata[set_idx];
 
     // Look up orbit point from storage buffer
-    let orbit_index = meta.subset_index * uniforms.points_per_subplot + point_idx;
+    let orbit_index = set_md.subset_index * uniforms.points_per_subplot + point_idx;
     let point = orbit_points[orbit_index];
 
     // Apply Z-axis rotation (sin/cos pre-computed in metadata)
-    let rx = point.x * meta.cos_rotation - point.y * meta.sin_rotation;
-    let ry = point.x * meta.sin_rotation + point.y * meta.cos_rotation;
-    let world_pos = vec3<f32>(rx, ry, meta.z_position);
+    let rx = point.x * set_md.cos_rotation - point.y * set_md.sin_rotation;
+    let ry = point.x * set_md.sin_rotation + point.y * set_md.cos_rotation;
+    let world_pos = vec3<f32>(rx, ry, set_md.z_position);
 
     // Transform to clip space
     let clip_center = uniforms.view_proj * vec4<f32>(world_pos, 1.0);
@@ -72,7 +72,7 @@ fn vs_main(
     // UV for texture sampling
     out.uv = vert.quad_pos + vec2<f32>(0.5, 0.5);
 
-    out.color = meta.color;
+    out.color = set_md.color;
 
     // Exponential fog
     let dist = length(world_pos - uniforms.camera_pos);
