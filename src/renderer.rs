@@ -1,6 +1,3 @@
-#[allow(unused_imports)]
-use micromath::F32Ext;
-
 use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
