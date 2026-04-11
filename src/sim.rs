@@ -1,6 +1,3 @@
-#[allow(unused_imports)]
-use micromath::F32Ext;
-
 use rand::Rng;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
