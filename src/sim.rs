@@ -81,9 +81,9 @@ pub struct ParticleSetState {
     pub points: Arc<Vec<[f32; 2]>>,
     /// Baked hue value for this set's current color.
     pub hue: f32,
-    /// Cached RGBA color computed from hue, saturation, and brightness.
+    /// Cached RGBA color (unorm8) computed from hue, saturation, and brightness.
     /// Only recomputed when hue changes (on wraparound or init).
-    pub cached_color: [f32; 4],
+    pub cached_color: [u8; 4],
 }
 
 // ── Simulation State ───────────────────────────────────────────────────────────
@@ -202,7 +202,7 @@ impl HopalongSim {
                     subset_index: subset,
                     level_index: level,
                     points,
-                    cached_color: hsv_to_rgba(hue, DEF_SATURATION, DEF_BRIGHTNESS),
+                    cached_color: hsv_to_rgba_u8(hue, DEF_SATURATION, DEF_BRIGHTNESS),
                     hue,
                 });
             }
@@ -250,7 +250,7 @@ impl HopalongSim {
                     }
                     if idx < self.hue_values.len() {
                         ps.hue = self.hue_values[idx];
-                        ps.cached_color = hsv_to_rgba(ps.hue, DEF_SATURATION, DEF_BRIGHTNESS);
+                        ps.cached_color = hsv_to_rgba_u8(ps.hue, DEF_SATURATION, DEF_BRIGHTNESS);
                     }
                     ps.needs_update = false;
                 }
@@ -391,6 +391,18 @@ pub fn hsv_to_rgba(h: f32, s: f32, v: f32) -> [f32; 4] {
     [r + m, g + m, b + m, 1.0]
 }
 
+/// Convert HSV (h in [0,1], s in [0,1], v in [0,1]) to RGBA unorm8 [0,255].
+#[inline]
+pub fn hsv_to_rgba_u8(h: f32, s: f32, v: f32) -> [u8; 4] {
+    let [r, g, b, a] = hsv_to_rgba(h, s, v);
+    [
+        (r * 255.0).round() as u8,
+        (g * 255.0).round() as u8,
+        (b * 255.0).round() as u8,
+        (a * 255.0).round() as u8,
+    ]
+}
+
 // ── Unit Tests ─────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -432,6 +444,19 @@ mod tests {
         assert!((rgba[0] - 1.0).abs() < 0.01, "Red should be ~1.0");
         assert!((rgba[1] - 1.0).abs() < 0.01, "Green should be ~1.0");
         assert!((rgba[2] - 1.0).abs() < 0.01, "Blue should be ~1.0");
+    }
+
+    #[test]
+    fn test_hsv_to_rgba_u8() {
+        // Red
+        let rgba = hsv_to_rgba_u8(0.0, 1.0, 1.0);
+        assert_eq!(rgba, [255, 0, 0, 255]);
+        // White (zero saturation)
+        let rgba = hsv_to_rgba_u8(0.5, 0.0, 1.0);
+        assert_eq!(rgba, [255, 255, 255, 255]);
+        // Black (zero value)
+        let rgba = hsv_to_rgba_u8(0.0, 1.0, 0.0);
+        assert_eq!(rgba, [0, 0, 0, 255]);
     }
 
     #[test]

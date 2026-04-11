@@ -18,8 +18,7 @@ pub struct QuadVertex {
 #[derive(Copy, Clone, Pod, Zeroable)]
 pub struct ParticleInstance {
     pub world_pos: [f32; 3],
-    pub _pad: f32, // align to 16 bytes
-    pub color: [f32; 4],
+    pub color: [u8; 4], // RGBA as unorm8, auto-normalized to [0,1] by GPU
 }
 
 #[repr(C)]
@@ -259,10 +258,10 @@ impl HopalongRendererResources {
                                 offset: 0,
                                 shader_location: 1,
                             },
-                            // color: vec4 (offset past world_pos + padding = 16 bytes)
+                            // color: unorm8x4 (offset past world_pos = 12 bytes), GPU normalizes to [0,1]
                             wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x4,
-                                offset: 16,
+                                format: wgpu::VertexFormat::Unorm8x4,
+                                offset: 12,
                                 shader_location: 2,
                             },
                         ],
@@ -352,7 +351,6 @@ pub fn build_instances_into(sim: &HopalongSim, buffer: &mut Vec<ParticleInstance
 
             buffer.push(ParticleInstance {
                 world_pos: [rx, ry, ps.z_position],
-                _pad: 0.0,
                 color,
             });
         }
