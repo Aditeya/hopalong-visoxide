@@ -330,13 +330,23 @@ pub fn build_instances_into(sim: &HopalongSim, buffer: &mut Vec<ParticleInstance
     let num_points = sim.settings.points_per_subset;
     buffer.reserve(sim.total_particles());
 
+    let cam_z = sim.camera_z;
+    let far_clip = 3.0 * SCALE_FACTOR;
+    let fog_cull_dist = -(0.01f32).ln() / FOG_DENSITY;
+
     for ps in &sim.particle_sets {
+        let dz = cam_z - ps.z_position;
+
+        // Cull sets entirely behind the camera or beyond the far clip / fog threshold.
+        if dz < 0.0 || dz > far_clip.max(fog_cull_dist) {
+            continue;
+        }
+
         let color = ps.cached_color;
 
         let (sin_r, cos_r) = ps.z_rotation.sin_cos();
 
         for point in ps.points.iter().take(num_points) {
-            // Apply Z-axis rotation to the 2D orbit position.
             let rx = point[0] * cos_r - point[1] * sin_r;
             let ry = point[0] * sin_r + point[1] * cos_r;
 
