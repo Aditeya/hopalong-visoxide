@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use rand::Rng;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -76,7 +78,7 @@ pub struct ParticleSetState {
     /// Baked copy of the 2D orbit points this set is currently rendering.
     /// Only updated when the set wraps around past the camera and
     /// `needs_update` is true — this creates the gradual transition.
-    pub points: Vec<[f32; 2]>,
+    pub points: Arc<Vec<[f32; 2]>>,
     /// Baked hue value for this set's current color.
     pub hue: f32,
     /// Cached RGBA color computed from hue, saturation, and brightness.
@@ -90,7 +92,7 @@ pub struct HopalongSim {
     pub settings: SimSettings,
     pub orbit_params: OrbitParams,
     /// Latest 2D orbit data (staging area for next transition).
-    pub orbit_subsets: Vec<Vec<[f32; 2]>>,
+    pub orbit_subsets: Vec<Arc<Vec<[f32; 2]>>>,
     /// Latest hue values (staging area for next transition).
     pub hue_values: Vec<f32>,
     /// State for each particle set (num_levels * num_subsets total).
@@ -181,11 +183,11 @@ impl HopalongSim {
                     - (subset as f32 * LEVEL_DEPTH / num_subsets as f32)
                     + SCALE_FACTOR / 2.0;
 
-                // Bake a copy of the orbit data for this set.
+                // Share orbit data via Arc — no clone of the point buffer.
                 let points = if subset < self.orbit_subsets.len() {
-                    self.orbit_subsets[subset].clone()
+                    Arc::clone(&self.orbit_subsets[subset])
                 } else {
-                    Vec::new()
+                    Arc::new(Vec::new())
                 };
                 let hue = if subset < self.hue_values.len() {
                     self.hue_values[subset]
@@ -244,7 +246,7 @@ impl HopalongSim {
                 if ps.needs_update {
                     let idx = ps.subset_index;
                     if idx < self.orbit_subsets.len() {
-                        ps.points = self.orbit_subsets[idx].clone();
+                        ps.points = Arc::clone(&self.orbit_subsets[idx]);
                     }
                     if idx < self.hue_values.len() {
                         ps.hue = self.hue_values[idx];
@@ -308,7 +310,7 @@ pub fn generate_orbit(
     params: &OrbitParams,
     num_subsets: usize,
     num_points: usize,
-) -> Vec<Vec<[f32; 2]>> {
+) -> Vec<Arc<Vec<[f32; 2]>>> {
     let mut rng = rand::rng();
     let choice: f32 = rng.random();
 
@@ -361,7 +363,7 @@ pub fn generate_orbit(
         }
     }
 
-    subsets
+    subsets.into_iter().map(Arc::new).collect()
 }
 
 // ── Color Utilities ────────────────────────────────────────────────────────────
@@ -514,7 +516,7 @@ mod tests {
         let subsets = generate_orbit(&params, 3, 1000);
 
         for subset in &subsets {
-            for point in subset {
+            for point in subset.iter() {
                 assert!(point[0].is_finite(), "X coordinate should be finite");
                 assert!(point[1].is_finite(), "Y coordinate should be finite");
                 assert!(!point[0].is_nan(), "X coordinate should not be NaN");
