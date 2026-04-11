@@ -8,7 +8,7 @@ use glam::{Mat4, Vec3};
 use wgpu::util::DeviceExt;
 
 use crate::sim::{
-    self, DEF_BRIGHTNESS, DEF_SATURATION, FOG_DENSITY, HopalongSim, SCALE_FACTOR, SPRITE_SIZE,
+    self, HopalongSim, DEF_BRIGHTNESS, DEF_SATURATION, FOG_DENSITY, SCALE_FACTOR, SPRITE_SIZE,
 };
 
 // ── Vertex Types ───────────────────────────────────────────────────────────────
@@ -424,7 +424,7 @@ impl egui_wgpu::CallbackTrait for HopalongPaintCallback {
 
     fn paint(
         &self,
-        _info: egui::PaintCallbackInfo,
+        info: egui::PaintCallbackInfo,
         render_pass: &mut wgpu::RenderPass<'static>,
         resources: &egui_wgpu::CallbackResources,
     ) {
@@ -433,6 +433,24 @@ impl egui_wgpu::CallbackTrait for HopalongPaintCallback {
         if res.instance_count == 0 {
             return;
         }
+
+        let viewport = info.viewport_in_pixels();
+        render_pass.set_viewport(
+            viewport.left_px as f32,
+            viewport.top_px as f32,
+            viewport.width_px as f32,
+            viewport.height_px as f32,
+            0.0,
+            1.0,
+        );
+
+        let clip = info.clip_rect_in_pixels();
+        render_pass.set_scissor_rect(
+            clip.left_px as u32,
+            clip.top_px as u32,
+            clip.width_px as u32,
+            clip.height_px as u32,
+        );
 
         render_pass.set_pipeline(&res.pipeline);
         render_pass.set_bind_group(0, &res.bind_group, &[]);

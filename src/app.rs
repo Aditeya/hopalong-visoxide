@@ -93,6 +93,8 @@ pub struct HopalongApp {
     frame_times: VecDeque<f32>,
     show_fps: bool,
     should_quit: bool,
+    is_fullscreen: bool,
+    should_toggle_fullscreen: bool,
     theme_applied: bool,
     current_dark_mode: Option<bool>, // Track current theme to detect changes
     // Pre-allocated buffer for particle instances to avoid per-frame allocation
@@ -124,6 +126,8 @@ impl HopalongApp {
             frame_times: VecDeque::with_capacity(120),
             show_fps: false,
             should_quit: false,
+            is_fullscreen: false,
+            should_toggle_fullscreen: false,
             theme_applied: false,
             current_dark_mode: None,
             instance_buffer: Vec::with_capacity(max_instances),
@@ -269,6 +273,10 @@ impl HopalongApp {
                         egui::Key::Tab => {
                             self.show_settings = !self.show_settings;
                         }
+                        egui::Key::F => {
+                            self.is_fullscreen = !self.is_fullscreen;
+                            self.should_toggle_fullscreen = true;
+                        }
                         egui::Key::Q => {
                             self.should_quit = true;
                         }
@@ -280,6 +288,11 @@ impl HopalongApp {
 
         if self.should_quit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
+        if self.should_toggle_fullscreen {
+            self.should_toggle_fullscreen = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.is_fullscreen));
         }
     }
 
@@ -661,6 +674,7 @@ impl HopalongApp {
                 ("L", "Lock mouse"),
                 ("C", "Centre + lock"),
                 ("R", "Reset defaults"),
+                ("F", "Toggle fullscreen"),
                 ("Q", "Quit"),
             ];
 
