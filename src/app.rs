@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::sync::Arc;
 use std::time::Instant;
 
 use eframe::egui;
@@ -96,11 +95,7 @@ pub struct HopalongApp {
     is_fullscreen: bool,
     should_toggle_fullscreen: bool,
     theme_applied: bool,
-    /// Track current theme to detect changes
     current_dark_mode: Option<bool>,
-    /// Scratch buffer for building particle instances before moving into cached_instances.
-    instance_buffer: Vec<crate::renderer::ParticleInstance>,
-    cached_instances: Option<Arc<Vec<crate::renderer::ParticleInstance>>>,
 }
 
 impl HopalongApp {
@@ -119,7 +114,6 @@ impl HopalongApp {
             .callback_resources
             .insert(resources);
 
-        let max_instances = sim.total_particles();
         Self {
             sim,
             show_settings: false,
@@ -131,8 +125,6 @@ impl HopalongApp {
             should_toggle_fullscreen: false,
             theme_applied: false,
             current_dark_mode: None,
-            instance_buffer: Vec::with_capacity(max_instances),
-            cached_instances: None,
         }
     }
 
@@ -801,20 +793,10 @@ impl eframe::App for HopalongApp {
         self.ui_fps_overlay(ctx);
 
         // ── Central panel: custom wgpu rendering ──
-        // Only rebuild instances if dirty (optimization)
-        if self.sim.instances_dirty {
-            renderer::build_instances_into(&self.sim, &mut self.instance_buffer);
-            self.sim.instances_dirty = false;
-            let new_instances = Arc::new(std::mem::take(&mut self.instance_buffer));
-            self.instance_buffer = Vec::with_capacity(new_instances.len());
-            self.cached_instances = Some(new_instances);
-        }
-
-        let instances = self
-            .cached_instances
-            .as_ref()
-            .expect("cached_instances always populated after first frame")
-            .clone();
+        let set_metadata = self.sim.build_set_metadata();
+        let orbit_data = self.sim.build_orbit_data();
+        let orbit_version = self.sim.orbit_version;
+        let instance_count = self.sim.total_particles() as u32;
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
@@ -830,13 +812,15 @@ impl eframe::App for HopalongApp {
                 };
 
                 let uniforms = renderer::build_uniforms(&self.sim, aspect);
-                // instances are already built above, but we need to recalc uniforms with correct aspect
 
                 let callback = egui_wgpu::Callback::new_paint_callback(
                     rect,
                     HopalongPaintCallback {
                         uniforms,
-                        instances: instances.clone(),
+                        set_metadata,
+                        orbit_data,
+                        orbit_version,
+                        instance_count,
                     },
                 );
                 ui.painter().add(callback);

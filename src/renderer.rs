@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use bytemuck::{Pod, Zeroable};
 use glam::{Mat4, Vec3};
 use wgpu::util::DeviceExt;
 
-use crate::sim::{HopalongSim, FOG_DENSITY, SCALE_FACTOR, SPRITE_SIZE};
+use crate::sim::{HopalongSim, SetMetadata, FOG_DENSITY, SCALE_FACTOR, SPRITE_SIZE};
 
 // ── Vertex Types ───────────────────────────────────────────────────────────────
 
@@ -16,21 +14,14 @@ pub struct QuadVertex {
 
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
-pub struct ParticleInstance {
-    pub world_pos: [f32; 3],
-    pub color: [u8; 4], // RGBA as unorm8, auto-normalized to [0,1] by GPU
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Pod, Zeroable)]
 pub struct Uniforms {
     pub view_proj: [f32; 16],
     pub camera_pos: [f32; 3],
     pub sprite_size: f32,
     pub fog_density: f32,
-    pub _pad0: f32,
-    pub _pad1: f32,
-    pub _pad2: f32,
+    pub points_per_subplot: u32,
+    pub total_sets: u32,
+    pub _pad2: u32,
 }
 
 // ── Quad Geometry ──────────────────────────────────────────────────────────────
@@ -57,13 +48,16 @@ const QUAD_INDICES: &[u16] = &[0, 1, 2, 2, 1, 3];
 /// Stored in `egui_wgpu::CallbackResources` so the paint callback can access them.
 pub struct HopalongRendererResources {
     pub pipeline: wgpu::RenderPipeline,
-    pub bind_group: wgpu::BindGroup,
+    pub bind_group_0: wgpu::BindGroup,
+    pub bind_group_1: wgpu::BindGroup,
+    pub bind_group_layout_1: wgpu::BindGroupLayout,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub uniform_buffer: wgpu::Buffer,
-    pub instance_buffer: wgpu::Buffer,
+    pub orbit_buffer: wgpu::Buffer,
+    pub set_metadata_buffer: wgpu::Buffer,
     pub instance_count: u32,
-    pub max_instances: usize,
+    pub orbit_version: u64,
 }
 
 impl HopalongRendererResources {
@@ -76,9 +70,6 @@ impl HopalongRendererResources {
         let mut sprite_image = image::load_from_memory(sprite_bytes)
             .expect("Failed to load galaxy.png")
             .to_rgba8();
-        // The galaxy.png has no alpha channel (RGB only). Generate alpha from
-        // luminance so the dark edges become transparent — this is how Three.js
-        // PointsMaterial effectively treats the sprite map with additive blending.
         for pixel in sprite_image.pixels_mut() {
             let lum = pixel[0].max(pixel[1]).max(pixel[2]);
             pixel[3] = lum;
@@ -131,9 +122,9 @@ impl HopalongRendererResources {
             camera_pos: [0.0, 0.0, SCALE_FACTOR / 2.0],
             sprite_size: SPRITE_SIZE,
             fog_density: FOG_DENSITY,
-            _pad0: 0.0,
-            _pad1: 0.0,
-            _pad2: 0.0,
+            points_per_subplot: sim.settings.points_per_subset as u32,
+            total_sets: sim.particle_sets.len() as u32,
+            _pad2: 0,
         };
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("uniforms"),
@@ -141,42 +132,59 @@ impl HopalongRendererResources {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        // ── Bind group layout ──
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("particle_bind_group_layout"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
+        // ── Storage buffers ──
+        let orbit_data = sim.build_orbit_data();
+        let set_metadata = sim.build_set_metadata();
+
+        let orbit_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("orbit_points"),
+            contents: bytemuck::cast_slice(&orbit_data),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         });
 
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("particle_bind_group"),
-            layout: &bind_group_layout,
+        let set_metadata_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("set_metadata"),
+            contents: bytemuck::cast_slice(&set_metadata),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // ── Bind group layout 0: uniforms + texture + sampler ──
+        let bind_group_layout_0 =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("particle_bind_group_layout_0"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+            });
+
+        let bind_group_0 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("particle_bind_group_0"),
+            layout: &bind_group_layout_0,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -189,6 +197,49 @@ impl HopalongRendererResources {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(&sampler),
+                },
+            ],
+        });
+
+        // ── Bind group layout 1: orbit points + set metadata (storage buffers) ──
+        let bind_group_layout_1 =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("particle_bind_group_layout_1"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
+            });
+
+        let bind_group_1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("particle_bind_group_1"),
+            layout: &bind_group_layout_1,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: orbit_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: set_metadata_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -206,15 +257,6 @@ impl HopalongRendererResources {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        // ── Instance buffer (pre-allocate for max particles) ──
-        let max_instances = sim.total_particles();
-        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("instance_buffer"),
-            size: (max_instances * std::mem::size_of::<ParticleInstance>()) as u64,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
         // ── Shader ──
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("particle_shader"),
@@ -224,7 +266,7 @@ impl HopalongRendererResources {
         // ── Pipeline layout ──
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("particle_pipeline_layout"),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&bind_group_layout_0, &bind_group_layout_1],
             push_constant_ranges: &[],
         });
 
@@ -237,7 +279,7 @@ impl HopalongRendererResources {
                 entry_point: Some("vs_main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
                 buffers: &[
-                    // Vertex buffer (quad corners)
+                    // Quad vertex buffer (only buffer — instance data comes from storage buffers)
                     wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<QuadVertex>() as u64,
                         step_mode: wgpu::VertexStepMode::Vertex,
@@ -247,37 +289,18 @@ impl HopalongRendererResources {
                             shader_location: 0,
                         }],
                     },
-                    // Instance buffer (per-particle data)
-                    wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<ParticleInstance>() as u64,
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &[
-                            // world_pos: vec3
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Float32x3,
-                                offset: 0,
-                                shader_location: 1,
-                            },
-                            // color: unorm8x4 (offset past world_pos = 12 bytes), GPU normalizes to [0,1]
-                            wgpu::VertexAttribute {
-                                format: wgpu::VertexFormat::Unorm8x4,
-                                offset: 12,
-                                shader_location: 2,
-                            },
-                        ],
-                    },
                 ],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None, // no culling for billboards
+                cull_mode: None,
                 unclipped_depth: false,
                 polygon_mode: wgpu::PolygonMode::Fill,
                 conservative: false,
             },
-            depth_stencil: None, // no depth testing (additive blending)
+            depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -288,7 +311,7 @@ impl HopalongRendererResources {
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::One, // additive
+                            dst_factor: wgpu::BlendFactor::One,
                             operation: wgpu::BlendOperation::Add,
                         },
                         alpha: wgpu::BlendComponent {
@@ -306,53 +329,16 @@ impl HopalongRendererResources {
 
         Self {
             pipeline,
-            bind_group,
+            bind_group_0,
+            bind_group_1,
+            bind_group_layout_1,
             vertex_buffer,
             index_buffer,
             uniform_buffer,
-            instance_buffer,
-            instance_count: 0,
-            max_instances,
-        }
-    }
-}
-
-// ── Build Instance Data ────────────────────────────────────────────────────────
-
-/// Build particle instances into a pre-allocated buffer.
-///
-/// This is more efficient than `build_instances` when the buffer can be reused
-/// across frames, avoiding per-frame allocation.
-#[inline]
-pub fn build_instances_into(sim: &HopalongSim, buffer: &mut Vec<ParticleInstance>) {
-    buffer.clear();
-    let num_points = sim.settings.points_per_subset;
-    buffer.reserve(sim.total_particles());
-
-    let cam_z = sim.camera_z;
-    let far_clip = 3.0 * SCALE_FACTOR;
-    let fog_cull_dist = -(0.01f32).ln() / FOG_DENSITY;
-
-    for ps in &sim.particle_sets {
-        let dz = cam_z - ps.z_position;
-
-        // Cull sets entirely behind the camera or beyond the far clip / fog threshold.
-        if dz < 0.0 || dz > far_clip.max(fog_cull_dist) {
-            continue;
-        }
-
-        let color = ps.cached_color;
-
-        let (sin_r, cos_r) = ps.z_rotation.sin_cos();
-
-        for point in ps.points.iter().take(num_points) {
-            let rx = point[0] * cos_r - point[1] * sin_r;
-            let ry = point[0] * sin_r + point[1] * cos_r;
-
-            buffer.push(ParticleInstance {
-                world_pos: [rx, ry, ps.z_position],
-                color,
-            });
+            orbit_buffer,
+            set_metadata_buffer,
+            instance_count: sim.total_particles() as u32,
+            orbit_version: sim.orbit_version,
         }
     }
 }
@@ -375,9 +361,9 @@ pub fn build_uniforms(sim: &HopalongSim, aspect: f32) -> Uniforms {
         camera_pos: cam_pos.to_array(),
         sprite_size: SPRITE_SIZE,
         fog_density: FOG_DENSITY,
-        _pad0: 0.0,
-        _pad1: 0.0,
-        _pad2: 0.0,
+        points_per_subplot: sim.settings.points_per_subset as u32,
+        total_sets: sim.particle_sets.len() as u32,
+        _pad2: 0,
     }
 }
 
@@ -386,7 +372,10 @@ pub fn build_uniforms(sim: &HopalongSim, aspect: f32) -> Uniforms {
 /// Data passed to the paint callback each frame.
 pub struct HopalongPaintCallback {
     pub uniforms: Uniforms,
-    pub instances: Arc<Vec<ParticleInstance>>,
+    pub set_metadata: Vec<SetMetadata>,
+    pub orbit_data: Vec<[f32; 2]>,
+    pub orbit_version: u64,
+    pub instance_count: u32,
 }
 
 impl egui_wgpu::CallbackTrait for HopalongPaintCallback {
@@ -403,26 +392,45 @@ impl egui_wgpu::CallbackTrait for HopalongPaintCallback {
         // Update uniforms.
         queue.write_buffer(&res.uniform_buffer, 0, bytemuck::bytes_of(&self.uniforms));
 
-        // Update instance buffer — reallocate if needed.
-        let instance_count = self.instances.len();
-        if instance_count > res.max_instances {
-            res.instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("instance_buffer_resized"),
-                size: (instance_count * std::mem::size_of::<ParticleInstance>()) as u64,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-            res.max_instances = instance_count;
+        // Update set metadata (every frame, ~1.5KB).
+        queue.write_buffer(
+            &res.set_metadata_buffer,
+            0,
+            bytemuck::cast_slice(&self.set_metadata),
+        );
+
+        // Update orbit data only when version changes (~224KB every 3s).
+        if self.orbit_version != res.orbit_version {
+            // Resize orbit buffer if needed.
+            let needed = (self.orbit_data.len() * std::mem::size_of::<[f32; 2]>()) as u64;
+            if needed > res.orbit_buffer.size() {
+                res.orbit_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("orbit_buffer_resized"),
+                    size: needed,
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                // Re-create bind group 1 with the new orbit buffer.
+                res.bind_group_1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("particle_bind_group_1_updated"),
+                    layout: &res.bind_group_layout_1,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: res.orbit_buffer.as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: res.set_metadata_buffer.as_entire_binding(),
+                        },
+                    ],
+                });
+            }
+            queue.write_buffer(&res.orbit_buffer, 0, bytemuck::cast_slice(&self.orbit_data));
+            res.orbit_version = self.orbit_version;
         }
 
-        if instance_count > 0 {
-            queue.write_buffer(
-                &res.instance_buffer,
-                0,
-                bytemuck::cast_slice(&self.instances),
-            );
-        }
-        res.instance_count = instance_count as u32;
+        res.instance_count = self.instance_count;
 
         Vec::new()
     }
@@ -458,9 +466,9 @@ impl egui_wgpu::CallbackTrait for HopalongPaintCallback {
         );
 
         render_pass.set_pipeline(&res.pipeline);
-        render_pass.set_bind_group(0, &res.bind_group, &[]);
+        render_pass.set_bind_group(0, &res.bind_group_0, &[]);
+        render_pass.set_bind_group(1, &res.bind_group_1, &[]);
         render_pass.set_vertex_buffer(0, res.vertex_buffer.slice(..));
-        render_pass.set_vertex_buffer(1, res.instance_buffer.slice(..));
         render_pass.set_index_buffer(res.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
         render_pass.draw_indexed(0..6, 0, 0..res.instance_count);
     }

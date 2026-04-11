@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bytemuck::{Pod, Zeroable};
 use rand::Rng;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -86,6 +87,18 @@ pub struct ParticleSetState {
     pub cached_color: [u8; 4],
 }
 
+/// Per-particle-set metadata uploaded to GPU every frame.
+/// The vertex shader uses this to compute world positions from orbit data.
+#[repr(C)]
+#[derive(Copy, Clone, Pod, Zeroable)]
+pub struct SetMetadata {
+    pub z_position: f32,
+    pub sin_rotation: f32,
+    pub cos_rotation: f32,
+    pub subset_index: u32,
+    pub color: [f32; 4],
+}
+
 // ── Simulation State ───────────────────────────────────────────────────────────
 
 pub struct HopalongSim {
@@ -108,8 +121,8 @@ pub struct HopalongSim {
     regen_timer: f32,
     /// Whether the simulation needs a full rebuild (settings changed structurally).
     pub needs_rebuild: bool,
-    /// Whether instance buffer data needs re-uploading.
-    pub instances_dirty: bool,
+    /// Increments each time orbit data changes, so renderer knows to re-upload.
+    pub orbit_version: u64,
 }
 
 impl Default for HopalongSim {
@@ -139,7 +152,7 @@ impl HopalongSim {
             mouse_y: 0.0,
             regen_timer: 0.0,
             needs_rebuild: false,
-            instances_dirty: true,
+            orbit_version: 0,
             settings,
         };
         sim.full_rebuild();
@@ -158,7 +171,7 @@ impl HopalongSim {
         self.init_particle_sets();
         self.regen_timer = 0.0;
         self.needs_rebuild = false;
-        self.instances_dirty = true;
+        self.orbit_version = self.orbit_version.wrapping_add(1);
     }
 
     fn shuffle_params(&mut self) {
@@ -257,8 +270,6 @@ impl HopalongSim {
             }
         }
 
-        self.instances_dirty = true;
-
         // ── Orbit regeneration timer ──
         self.regen_timer += dt;
         if self.regen_timer >= ORBIT_REGEN_INTERVAL {
@@ -275,6 +286,7 @@ impl HopalongSim {
             self.settings.points_per_subset,
         );
         self.hue_values = generate_hues(self.settings.subset_count);
+        self.orbit_version = self.orbit_version.wrapping_add(1);
 
         // Flag all particle sets for lazy update — each keeps rendering its
         // own baked data until it individually wraps past the camera.
@@ -301,6 +313,36 @@ impl HopalongSim {
     /// Total number of particles across all sets.
     pub fn total_particles(&self) -> usize {
         self.settings.level_count * self.settings.subset_count * self.settings.points_per_subset
+    }
+
+    /// Build per-set metadata for GPU upload. Called every frame.
+    pub fn build_set_metadata(&self) -> Vec<SetMetadata> {
+        self.particle_sets
+            .iter()
+            .map(|ps| SetMetadata {
+                z_position: ps.z_position,
+                sin_rotation: ps.z_rotation.sin(),
+                cos_rotation: ps.z_rotation.cos(),
+                subset_index: ps.subset_index as u32,
+                color: [
+                    ps.cached_color[0] as f32 / 255.0,
+                    ps.cached_color[1] as f32 / 255.0,
+                    ps.cached_color[2] as f32 / 255.0,
+                    ps.cached_color[3] as f32 / 255.0,
+                ],
+            })
+            .collect()
+    }
+
+    /// Flatten all orbit subsets into a contiguous array for GPU upload.
+    /// Index as: orbit_data[subset_index * points_per_subset + point_index]
+    pub fn build_orbit_data(&self) -> Vec<[f32; 2]> {
+        let n = self.settings.points_per_subset;
+        let mut data = Vec::with_capacity(self.orbit_subsets.len() * n);
+        for subset in &self.orbit_subsets {
+            data.extend_from_slice(subset);
+        }
+        data
     }
 }
 
@@ -680,5 +722,55 @@ mod tests {
             movement,
             expected_max_movement
         );
+    }
+
+    #[test]
+    fn test_build_set_metadata() {
+        let sim = HopalongSim::new();
+        let metadata = sim.build_set_metadata();
+
+        assert_eq!(metadata.len(), sim.particle_sets.len());
+
+        for (i, meta) in metadata.iter().enumerate() {
+            let ps = &sim.particle_sets[i];
+            assert!((meta.z_position - ps.z_position).abs() < 0.001);
+            assert!((meta.sin_rotation - ps.z_rotation.sin()).abs() < 0.001);
+            assert!((meta.cos_rotation - ps.z_rotation.cos()).abs() < 0.001);
+            assert_eq!(meta.subset_index, ps.subset_index as u32);
+            assert!((meta.color[0] - ps.cached_color[0] as f32 / 255.0).abs() < 0.01);
+            assert!((meta.color[3] - 1.0).abs() < 0.01);
+        }
+    }
+
+    #[test]
+    fn test_build_orbit_data() {
+        let sim = HopalongSim::new();
+        let orbit_data = sim.build_orbit_data();
+
+        let expected_len: usize = sim.orbit_subsets.iter().map(|s| s.len()).sum();
+        assert_eq!(orbit_data.len(), expected_len);
+
+        for point in &orbit_data {
+            assert!(point[0].is_finite());
+            assert!(point[1].is_finite());
+        }
+    }
+
+    #[test]
+    fn test_orbit_version_increments() {
+        let mut sim = HopalongSim::new();
+        let initial_version = sim.orbit_version;
+
+        sim.regenerate_orbit();
+        assert_eq!(sim.orbit_version, initial_version + 1);
+
+        sim.full_rebuild();
+        assert_eq!(sim.orbit_version, initial_version + 2);
+    }
+
+    #[test]
+    fn test_set_metadata_size_and_alignment() {
+        assert_eq!(std::mem::size_of::<SetMetadata>(), 32);
+        assert_eq!(std::mem::align_of::<SetMetadata>(), 4);
     }
 }
