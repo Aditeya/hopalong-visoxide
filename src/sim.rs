@@ -372,6 +372,7 @@ fn generate_hues(num_subsets: usize) -> Vec<f32> {
 }
 
 /// Convert HSV (h in [0,1], s in [0,1], v in [0,1]) to RGBA [0,1].
+#[inline]
 pub fn hsv_to_rgba(h: f32, s: f32, v: f32) -> [f32; 4] {
     let c = v * s;
     let h6 = h * 6.0;

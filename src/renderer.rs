@@ -324,6 +324,7 @@ impl HopalongRendererResources {
 ///
 /// This is more efficient than `build_instances` when the buffer can be reused
 /// across frames, avoiding per-frame allocation.
+#[inline]
 pub fn build_instances_into(sim: &HopalongSim, buffer: &mut Vec<ParticleInstance>) {
     buffer.clear();
     let num_points = sim.settings.points_per_subset;
@@ -349,6 +350,7 @@ pub fn build_instances_into(sim: &HopalongSim, buffer: &mut Vec<ParticleInstance
 }
 
 /// Build the view-projection uniform data.
+#[inline]
 pub fn build_uniforms(sim: &HopalongSim, aspect: f32) -> Uniforms {
     let cam_pos = Vec3::new(sim.camera_x, sim.camera_y, sim.camera_z);
     let view = Mat4::look_at_rh(cam_pos, Vec3::ZERO, Vec3::Y);
