@@ -95,7 +95,7 @@ pub struct SetMetadata {
     pub z_position: f32,
     pub sin_rotation: f32,
     pub cos_rotation: f32,
-    pub subset_index: u32,
+    pub orbit_offset: u32,
     pub color: [f32; 4],
 }
 
@@ -317,13 +317,15 @@ impl HopalongSim {
 
     /// Build per-set metadata for GPU upload. Called every frame.
     pub fn build_set_metadata(&self) -> Vec<SetMetadata> {
+        let n = self.settings.points_per_subset;
         self.particle_sets
             .iter()
-            .map(|ps| SetMetadata {
+            .enumerate()
+            .map(|(i, ps)| SetMetadata {
                 z_position: ps.z_position,
                 sin_rotation: ps.z_rotation.sin(),
                 cos_rotation: ps.z_rotation.cos(),
-                subset_index: ps.subset_index as u32,
+                orbit_offset: (i * n) as u32,
                 color: [
                     ps.cached_color[0] as f32 / 255.0,
                     ps.cached_color[1] as f32 / 255.0,
@@ -334,13 +336,21 @@ impl HopalongSim {
             .collect()
     }
 
-    /// Flatten all orbit subsets into a contiguous array for GPU upload.
-    /// Index as: orbit_data[subset_index * points_per_subset + point_index]
+    /// Flatten each particle set's baked orbit points into a contiguous array
+    /// for GPU upload. Uses per-set baked data (not latest orbit_subsets) to
+    /// preserve gradual transitions when orbit parameters change.
+    /// Index as: orbit_data[set_index * points_per_subset + point_index]
     pub fn build_orbit_data(&self) -> Vec<[f32; 2]> {
         let n = self.settings.points_per_subset;
-        let mut data = Vec::with_capacity(self.orbit_subsets.len() * n);
-        for subset in &self.orbit_subsets {
-            data.extend_from_slice(subset);
+        let mut data = Vec::with_capacity(self.particle_sets.len() * n);
+        for ps in &self.particle_sets {
+            let points: &[[f32; 2]] = ps.points.as_slice();
+            let len = points.len().min(n);
+            data.extend_from_slice(&points[..len]);
+            // Pad with zeros if this set has fewer baked points than expected
+            for _ in len..n {
+                data.push([0.0, 0.0]);
+            }
         }
         data
     }
@@ -736,7 +746,10 @@ mod tests {
             assert!((meta.z_position - ps.z_position).abs() < 0.001);
             assert!((meta.sin_rotation - ps.z_rotation.sin()).abs() < 0.001);
             assert!((meta.cos_rotation - ps.z_rotation.cos()).abs() < 0.001);
-            assert_eq!(meta.subset_index, ps.subset_index as u32);
+            assert_eq!(
+                meta.orbit_offset,
+                (i * sim.settings.points_per_subset) as u32
+            );
             assert!((meta.color[0] - ps.cached_color[0] as f32 / 255.0).abs() < 0.01);
             assert!((meta.color[3] - 1.0).abs() < 0.01);
         }
@@ -747,7 +760,7 @@ mod tests {
         let sim = HopalongSim::new();
         let orbit_data = sim.build_orbit_data();
 
-        let expected_len: usize = sim.orbit_subsets.iter().map(|s| s.len()).sum();
+        let expected_len = sim.particle_sets.len() * sim.settings.points_per_subset;
         assert_eq!(orbit_data.len(), expected_len);
 
         for point in &orbit_data {

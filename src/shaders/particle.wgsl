@@ -18,7 +18,7 @@ struct SetMetadata {
     z_position: f32,
     sin_rotation: f32,
     cos_rotation: f32,
-    subset_index: u32,
+    orbit_offset: u32,
     color: vec4<f32>,
 };
 
@@ -53,7 +53,7 @@ fn vs_main(
     let set_md = set_metadata[set_idx];
 
     // Look up orbit point from storage buffer
-    let orbit_index = set_md.subset_index * uniforms.points_per_subplot + point_idx;
+    let orbit_index = set_md.orbit_offset + point_idx;
     let point = orbit_points[orbit_index];
 
     // Apply Z-axis rotation (sin/cos pre-computed in metadata)

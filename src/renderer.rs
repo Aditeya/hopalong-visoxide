@@ -57,7 +57,6 @@ pub struct HopalongRendererResources {
     pub orbit_buffer: wgpu::Buffer,
     pub set_metadata_buffer: wgpu::Buffer,
     pub instance_count: u32,
-    pub orbit_version: u64,
 }
 
 impl HopalongRendererResources {
@@ -338,7 +337,6 @@ impl HopalongRendererResources {
             orbit_buffer,
             set_metadata_buffer,
             instance_count: sim.total_particles() as u32,
-            orbit_version: sim.orbit_version,
         }
     }
 }
@@ -374,7 +372,6 @@ pub struct HopalongPaintCallback {
     pub uniforms: Uniforms,
     pub set_metadata: Vec<SetMetadata>,
     pub orbit_data: Vec<[f32; 2]>,
-    pub orbit_version: u64,
     pub instance_count: u32,
 }
 
@@ -399,36 +396,32 @@ impl egui_wgpu::CallbackTrait for HopalongPaintCallback {
             bytemuck::cast_slice(&self.set_metadata),
         );
 
-        // Update orbit data only when version changes (~224KB every 3s).
-        if self.orbit_version != res.orbit_version {
-            // Resize orbit buffer if needed.
-            let needed = (self.orbit_data.len() * std::mem::size_of::<[f32; 2]>()) as u64;
-            if needed > res.orbit_buffer.size() {
-                res.orbit_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("orbit_buffer_resized"),
-                    size: needed,
-                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
-                // Re-create bind group 1 with the new orbit buffer.
-                res.bind_group_1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("particle_bind_group_1_updated"),
-                    layout: &res.bind_group_layout_1,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: res.orbit_buffer.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: res.set_metadata_buffer.as_entire_binding(),
-                        },
-                    ],
-                });
-            }
-            queue.write_buffer(&res.orbit_buffer, 0, bytemuck::cast_slice(&self.orbit_data));
-            res.orbit_version = self.orbit_version;
+        // Update orbit data (every frame, ~1.5MB — per-set baked data for transitions).
+        // Resize orbit buffer if needed.
+        let needed = (self.orbit_data.len() * std::mem::size_of::<[f32; 2]>()) as u64;
+        if needed > res.orbit_buffer.size() {
+            res.orbit_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("orbit_buffer_resized"),
+                size: needed,
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+            res.bind_group_1 = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("particle_bind_group_1_updated"),
+                layout: &res.bind_group_layout_1,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: res.orbit_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: res.set_metadata_buffer.as_entire_binding(),
+                    },
+                ],
+            });
         }
+        queue.write_buffer(&res.orbit_buffer, 0, bytemuck::cast_slice(&self.orbit_data));
 
         res.instance_count = self.instance_count;
 

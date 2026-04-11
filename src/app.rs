@@ -795,7 +795,6 @@ impl eframe::App for HopalongApp {
         // ── Central panel: custom wgpu rendering ──
         let set_metadata = self.sim.build_set_metadata();
         let orbit_data = self.sim.build_orbit_data();
-        let orbit_version = self.sim.orbit_version;
         let instance_count = self.sim.total_particles() as u32;
 
         egui::CentralPanel::default()
@@ -819,7 +818,6 @@ impl eframe::App for HopalongApp {
                         uniforms,
                         set_metadata,
                         orbit_data,
-                        orbit_version,
                         instance_count,
                     },
                 );
