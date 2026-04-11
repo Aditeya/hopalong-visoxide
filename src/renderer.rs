@@ -86,7 +86,6 @@ impl HopalongRendererResources {
         }
         let (tex_w, tex_h) = sprite_image.dimensions();
 
-        let mip_level_count = (tex_w.max(tex_h).ilog2() + 1).min(8) as u32;
         let texture_size = wgpu::Extent3d {
             width: tex_w,
             height: tex_h,
@@ -95,7 +94,7 @@ impl HopalongRendererResources {
         let sprite_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("galaxy_sprite"),
             size: texture_size,
-            mip_level_count,
+            mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba8Unorm,
@@ -103,71 +102,27 @@ impl HopalongRendererResources {
             view_formats: &[],
         });
 
-        let mut mip_width = tex_w;
-        let mut mip_height = tex_h;
-        let mut mip_data = sprite_image.clone().into_raw();
-
-        for mip in 0..mip_level_count {
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &sprite_texture,
-                    mip_level: mip,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                &mip_data,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(4 * mip_width),
-                    rows_per_image: Some(mip_height),
-                },
-                wgpu::Extent3d {
-                    width: mip_width,
-                    height: mip_height,
-                    depth_or_array_layers: 1,
-                },
-            );
-
-            if mip + 1 < mip_level_count {
-                let next_width = (mip_width + 1) / 2;
-                let next_height = (mip_height + 1) / 2;
-                let mut next_data = Vec::with_capacity((next_width * next_height * 4) as usize);
-
-                let src_pixels = &mip_data;
-                for y in 0..next_height {
-                    for x in 0..next_width {
-                        let sx = x * 2;
-                        let sy = y * 2;
-                        let i00 = ((sy * mip_width) + sx) as usize * 4;
-                        let i10 = ((sy * mip_width) + (sx + 1).min(mip_width)) as usize * 4;
-                        let i01 = (((sy + 1).min(mip_height) * mip_width) + sx) as usize * 4;
-                        let i11 = (((sy + 1).min(mip_height) * mip_width) + (sx + 1).min(mip_width))
-                            as usize
-                            * 4;
-
-                        for c in 0..4 {
-                            let val = (src_pixels[i00 + c] as u32
-                                + src_pixels[i10 + c] as u32
-                                + src_pixels[i01 + c] as u32
-                                + src_pixels[i11 + c] as u32)
-                                / 4;
-                            next_data.push(val as u8);
-                        }
-                    }
-                }
-
-                mip_data = next_data;
-                mip_width = next_width;
-                mip_height = next_height;
-            }
-        }
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &sprite_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &sprite_image,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(4 * tex_w),
+                rows_per_image: Some(tex_h),
+            },
+            texture_size,
+        );
 
         let texture_view = sprite_texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("sprite_sampler"),
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
 
