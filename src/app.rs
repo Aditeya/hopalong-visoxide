@@ -96,9 +96,11 @@ pub struct HopalongApp {
     is_fullscreen: bool,
     should_toggle_fullscreen: bool,
     theme_applied: bool,
-    current_dark_mode: Option<bool>, // Track current theme to detect changes
-    // Pre-allocated buffer for particle instances to avoid per-frame allocation
+    /// Track current theme to detect changes
+    current_dark_mode: Option<bool>,
+    /// Scratch buffer for building particle instances before moving into cached_instances.
     instance_buffer: Vec<crate::renderer::ParticleInstance>,
+    cached_instances: Option<Arc<Vec<crate::renderer::ParticleInstance>>>,
 }
 
 impl HopalongApp {
@@ -118,7 +120,6 @@ impl HopalongApp {
             .insert(resources);
 
         let max_instances = sim.total_particles();
-
         Self {
             sim,
             show_settings: false,
@@ -131,6 +132,7 @@ impl HopalongApp {
             theme_applied: false,
             current_dark_mode: None,
             instance_buffer: Vec::with_capacity(max_instances),
+            cached_instances: None,
         }
     }
 
@@ -803,9 +805,16 @@ impl eframe::App for HopalongApp {
         if self.sim.instances_dirty {
             renderer::build_instances_into(&self.sim, &mut self.instance_buffer);
             self.sim.instances_dirty = false;
+            let new_instances = Arc::new(std::mem::take(&mut self.instance_buffer));
+            self.instance_buffer = Vec::with_capacity(new_instances.len());
+            self.cached_instances = Some(new_instances);
         }
 
-        let instances = Arc::new(self.instance_buffer.clone());
+        let instances = self
+            .cached_instances
+            .as_ref()
+            .expect("cached_instances always populated after first frame")
+            .clone();
 
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
